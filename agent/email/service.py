@@ -1,21 +1,38 @@
 import smtplib
 import os
+import mimetypes
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import Optional
+from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
+from email.mime.application import MIMEApplication
+from email import encoders
+from typing import Optional, List
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# Base directory for uploads
+BASE_DIR = Path(__file__).parent.parent.parent
+UPLOADS_DIR = BASE_DIR / "uploads"
+
 
 class EmailService:
-    """Gmail SMTP email service for sending proposals."""
+    """Gmail SMTP email service for sending proposals with attachments."""
+    
+    # Default attachments from uploads folder
+    DEFAULT_ATTACHMENTS = [
+        "MANH THANG PICKLEBALL FACTORY.pdf_20250919_102104_0000.pdf",
+        "WhatsApp Image 2025-09-19 at 08.58.41.jpeg"
+    ]
     
     def __init__(self):
         self.smtp_server = "smtp.gmail.com"
         self.smtp_port = 587
         self.sender_email = os.getenv("GMAIL_EMAIL", "")
         self.sender_password = os.getenv("GMAIL_APP_PASSWORD", "")
+        self.uploads_dir = UPLOADS_DIR
         
         # Default proposal template
         self.default_template = """Dear Sir / Madam,
@@ -88,21 +105,84 @@ Vijay Pawar"""
         """Check if email service is properly configured."""
         return bool(self.sender_email and self.sender_password)
 
+    def get_available_attachments(self) -> List[dict]:
+        """Get list of available attachment files from uploads folder."""
+        attachments = []
+        if self.uploads_dir.exists():
+            for file_path in self.uploads_dir.iterdir():
+                if file_path.is_file() and not file_path.name.startswith('.'):
+                    size_mb = file_path.stat().st_size / (1024 * 1024)
+                    attachments.append({
+                        "name": file_path.name,
+                        "path": str(file_path),
+                        "size_mb": round(size_mb, 2),
+                        "too_large": size_mb > 20  # Gmail limit warning
+                    })
+        return attachments
+
+    def _attach_file(self, msg: MIMEMultipart, file_path: Path) -> bool:
+        """Attach a file to the email message."""
+        if not file_path.exists():
+            return False
+        
+        # Get MIME type
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+        if mime_type is None:
+            mime_type = 'application/octet-stream'
+        
+        main_type, sub_type = mime_type.split('/', 1)
+        
+        try:
+            with open(file_path, 'rb') as f:
+                file_data = f.read()
+            
+            if main_type == 'image':
+                attachment = MIMEImage(file_data, _subtype=sub_type)
+            elif main_type == 'application' and sub_type == 'pdf':
+                attachment = MIMEApplication(file_data, _subtype=sub_type)
+            else:
+                attachment = MIMEBase(main_type, sub_type)
+                attachment.set_payload(file_data)
+                encoders.encode_base64(attachment)
+            
+            # Clean filename for attachment
+            clean_name = file_path.name
+            # Shorten long names
+            if len(clean_name) > 50:
+                ext = file_path.suffix
+                clean_name = clean_name[:45] + ext
+            
+            attachment.add_header(
+                'Content-Disposition',
+                'attachment',
+                filename=clean_name
+            )
+            msg.attach(attachment)
+            return True
+            
+        except Exception as e:
+            print(f"Error attaching file {file_path}: {e}")
+            return False
+
     def send_email(
         self,
         to_email: str,
         subject: str = "Pickleball Partnership Opportunity - Manh Thang Factory",
         body: Optional[str] = None,
-        recipient_name: Optional[str] = None
+        recipient_name: Optional[str] = None,
+        include_attachments: bool = True,
+        attachment_files: Optional[List[str]] = None
     ) -> dict:
         """
-        Send email via Gmail SMTP.
+        Send email via Gmail SMTP with attachments.
         
         Args:
             to_email: Recipient email address
             subject: Email subject line
             body: Email body (uses default template if not provided)
             recipient_name: Name of recipient for personalization
+            include_attachments: Whether to include file attachments
+            attachment_files: List of filenames to attach (uses defaults if None)
             
         Returns:
             dict with success status and message
@@ -127,15 +207,18 @@ Vijay Pawar"""
             email_body = email_body.replace("Dear Sir / Madam", f"Dear {recipient_name}")
         
         try:
-            # Create message
-            msg = MIMEMultipart("alternative")
+            # Create message with mixed content (text + attachments)
+            msg = MIMEMultipart("mixed")
             msg["Subject"] = subject
             msg["From"] = f"Vijay Pawar <{self.sender_email}>"
             msg["To"] = to_email
             
+            # Create alternative part for text/html
+            alt_part = MIMEMultipart("alternative")
+            
             # Plain text version
             text_part = MIMEText(email_body, "plain", "utf-8")
-            msg.attach(text_part)
+            alt_part.attach(text_part)
             
             # HTML version (convert newlines to <br>)
             html_body = email_body.replace("\n", "<br>")
@@ -149,7 +232,30 @@ Vijay Pawar"""
             </html>
             """
             html_part = MIMEText(html_content, "html", "utf-8")
-            msg.attach(html_part)
+            alt_part.attach(html_part)
+            
+            msg.attach(alt_part)
+            
+            # Add attachments
+            attached_files = []
+            skipped_files = []
+            
+            if include_attachments:
+                files_to_attach = attachment_files or self.DEFAULT_ATTACHMENTS
+                
+                for filename in files_to_attach:
+                    file_path = self.uploads_dir / filename
+                    if file_path.exists():
+                        # Check file size (Gmail limit is ~25MB, but we'll be conservative)
+                        size_mb = file_path.stat().st_size / (1024 * 1024)
+                        if size_mb > 20:
+                            skipped_files.append(f"{filename} (too large: {size_mb:.1f}MB)")
+                            continue
+                        
+                        if self._attach_file(msg, file_path):
+                            attached_files.append(filename)
+                    else:
+                        skipped_files.append(f"{filename} (not found)")
             
             # Send via SMTP
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
@@ -157,12 +263,19 @@ Vijay Pawar"""
                 server.login(self.sender_email, self.sender_password)
                 server.send_message(msg)
             
-            return {
+            result = {
                 "success": True,
                 "message": f"Email sent successfully to {to_email}",
                 "to": to_email,
-                "subject": subject
+                "subject": subject,
+                "attachments": attached_files
             }
+            
+            if skipped_files:
+                result["skipped_attachments"] = skipped_files
+                result["message"] += f" (skipped {len(skipped_files)} files)"
+            
+            return result
             
         except smtplib.SMTPAuthenticationError:
             return {
@@ -180,13 +293,19 @@ Vijay Pawar"""
                 "error": f"Failed to send email: {str(e)}"
             }
 
-    def send_bulk_emails(self, recipients: list, subject: str = None) -> dict:
+    def send_bulk_emails(
+        self,
+        recipients: list,
+        subject: str = None,
+        include_attachments: bool = True
+    ) -> dict:
         """
         Send emails to multiple recipients.
         
         Args:
             recipients: List of dicts with 'email' and optional 'name'
             subject: Email subject line
+            include_attachments: Whether to include file attachments
             
         Returns:
             dict with success/failure counts and details
@@ -210,7 +329,8 @@ Vijay Pawar"""
             result = self.send_email(
                 to_email=email,
                 subject=subject or "Pickleball Partnership Opportunity - Manh Thang Factory",
-                recipient_name=name
+                recipient_name=name,
+                include_attachments=include_attachments
             )
             
             if result.get("success"):
@@ -221,7 +341,8 @@ Vijay Pawar"""
             results["details"].append({
                 "email": email,
                 "success": result.get("success"),
-                "error": result.get("error")
+                "error": result.get("error"),
+                "attachments": result.get("attachments", [])
             })
         
         return results
