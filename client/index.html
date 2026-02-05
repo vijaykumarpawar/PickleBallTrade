@@ -34,6 +34,7 @@ th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
 .toast.success{background:#28a745;color:white}
 .toast.error{background:#dc3545;color:white}
 .toast.info{background:#17a2b8;color:white}
+.toast.warning{background:#ffc107;color:#333}
 .email-status{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:20px;font-size:14px}
 .email-status.configured{background:#d4edda;color:#155724}
 .email-status.not-configured{background:#f8d7da;color:#721c24}
@@ -51,6 +52,10 @@ th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
 .checkbox-group input[type="checkbox"]{width:18px;height:18px}
 .sent-badge{display:inline-flex;align-items:center;gap:4px;background:#d4edda;color:#155724;padding:2px 8px;border-radius:12px;font-size:11px;margin-left:8px}
 .action-buttons{display:flex;gap:4px;align-items:center}
+.permission-modal{background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px;margin:16px 0}
+.permission-modal h4{color:#856404;margin-bottom:12px}
+.permission-modal ol{margin-left:20px;color:#856404}
+.permission-modal li{margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -101,9 +106,30 @@ Checking email status...
 <button class="btn btn-primary" onclick="exportCSV()">Export CSV</button>
 </div>
 </div>
-<table><thead><tr><th>Name</th><th>Type</th><th>Email</th><th>City</th><th>Status</th><th>Actions</th></tr></thead>
+<table><thead><tr><th>Name</th><th>Type</th><th>Contact</th><th>City</th><th>Status</th><th>Actions</th></tr></thead>
 <tbody id="tbody"><tr><td colspan="6" style="text-align:center">Loading...</td></tr></tbody>
 </table>
+</div>
+</div>
+
+<!-- Permission Request Modal -->
+<div class="modal" id="permissionModal">
+<div class="modal-content">
+<h2>🔐 Accessibility Permission Required</h2>
+<div class="permission-modal">
+<h4>One-time setup to enable WhatsApp automation:</h4>
+<ol id="permissionInstructions">
+<li>Open <b>System Settings</b> on your Mac</li>
+<li>Go to <b>Privacy & Security → Accessibility</b></li>
+<li>Click the lock icon to make changes</li>
+<li>Add and enable <b>Terminal</b> (or VS Code if running from IDE)</li>
+<li>Click "Done" below after granting permission</li>
+</ol>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-success" onclick="confirmPermission()">✅ Done - Permission Granted</button>
+<button class="btn" onclick="closePermissionModal()">Cancel</button>
+</div>
 </div>
 </div>
 
@@ -111,15 +137,16 @@ Checking email status...
 <div class="modal-content">
 <h2>📤 Send Proposal</h2>
 <div id="alreadySentWarning" style="display:none;background:#fff3cd;color:#856404;padding:12px;border-radius:8px;margin-bottom:16px">
-⚠️ Email already sent to this lead. Send again?
+⚠️ Message already sent to this lead. Send again?
 </div>
 <div class="form-group"><label>To</label><input id="recipient" readonly style="background:#f8f9fa"></div>
 <div class="form-group"><label>Email</label><input id="recipientEmail" readonly style="background:#f8f9fa"></div>
+<div class="form-group"><label>Phone</label><input id="recipientPhone" readonly style="background:#f8f9fa"></div>
 <div class="form-group"><label>Subject</label><input id="emailSubject" value="Pickleball Partnership Opportunity - Manh Thang Factory"></div>
 
 <div class="checkbox-group">
 <input type="checkbox" id="includeAttachments" checked>
-<label for="includeAttachments" style="margin:0;font-weight:normal">📎 Include attachments (PDF brochure + Product image)</label>
+<label for="includeAttachments" style="margin:0;font-weight:normal">📎 Include email attachments (PDF brochure + Product image)</label>
 </div>
 
 <div id="modalAttachments" class="attachment-list" style="margin-bottom:16px">
@@ -132,7 +159,7 @@ Checking email status...
 <div id="sendStatus" class="send-status"></div>
 <div style="display:flex;gap:8px;margin-top:16px">
 <button class="btn btn-email" id="sendEmailBtn" onclick="sendEmail()">📧 Send Email</button>
-<button class="btn btn-success" id="sendWABtn" onclick="sendWA()">💬 WhatsApp</button>
+<button class="btn btn-success" id="sendWABtn" onclick="sendWA()">💬 WhatsApp Direct</button>
 <button class="btn" onclick="closeModal()">Close</button>
 </div>
 </div>
@@ -144,6 +171,8 @@ Checking email status...
 const API = "http://localhost:8000";
 let entities = [], current = null, emailConfigured = false;
 let availableAttachments = [];
+let waPermissionGranted = false;
+let pendingWAEntity = null;
 
 const PROPOSAL_TEMPLATE = `Dear Sir / Madam,
 
@@ -156,29 +185,20 @@ Manh Thang Pickleball Factory operates with advanced rotational hot molding tech
 ✅ Product Highlight – E-WIN (ONE WIN) Pickleball Balls
 • Certified compliant with USA Pickleball Association (USAPA) standards
 • Designed for international competition and tournaments
-• Indoor ball weight: ~26 g
-• Outdoor ball weight: ~26.5 g
+• Indoor ball weight: ~26 g / Outdoor ball weight: ~26.5 g
 • Diameter: 74 mm (±5%)
 • Hardness: 44–46 HD (balanced control & durability)
 • 40 precision-drilled holes
-• Manufactured from high-quality PE virgin plastic with performance additives
-• Stable in hot and cold climates; does not soften during extended play
-• High-visibility green and yellow colors
 
 🏭 Manufacturing Strength
 • 5 automatic rotational casting technology production lines
 • Current capacity: 25,000–30,000 balls per day
-• Expansion plan: up to 50,000 balls per day
-• Factory area: over 7,000 m²
-• 65 skilled staff members
-• Continuous process improvement and strict inspection before packing
+• Factory area: over 7,000 m² | 65 skilled staff members
 
 📦 Product Portfolio
 • S2 Tournament Pickleball
 • E-WIN (ONE WIN) Tournament Series
-• Vincent Series
-• Multi-color Pickleballs
-• Mini Pickleballs
+• Vincent Series, Multi-color Pickleballs
 • 100% Biodegradable Pickleballs (eco-friendly option)
 
 🤝 Why Partner With Manh Thang
@@ -186,13 +206,6 @@ Manh Thang Pickleball Factory operates with advanced rotational hot molding tech
 • Competitive factory-direct pricing
 • OEM / Private label manufacturing available
 • Reliable production capacity & delivery schedules
-• Suitable for clubs, academies, tournaments, retailers, and e-commerce platforms
-
-We are currently appointing India distributors, state partners, and bulk buyers and would welcome discussions on:
-• Distribution / dealership model
-• Bulk purchase pricing
-• OEM branding
-• Sample evaluation
 
 📞 Factory Contact (Vietnam – Head Office)
 Manh Thang Industrial Service Development Company Limited
@@ -200,13 +213,12 @@ Phone: +84 91 253 16 66
 Email: manhthang2666@gmail.com
 Website: www.manhthangpickleballfactory.com
 
-For India coordination, please feel free to connect with:
+For India coordination:
 Vijay Pawar
-India – Business Development
 Mobile / WhatsApp: +91-7975397211
 Email: vijaykp.kp@gmail.com
 
-Looking forward to your positive response and the opportunity to build a long-term partnership.
+Looking forward to your positive response!
 
 Warm regards,
 Vijay Pawar`;
@@ -215,6 +227,7 @@ document.addEventListener("DOMContentLoaded", () => {
     loadCities();
     refresh();
     checkEmailStatus();
+    checkWAPermission();
 });
 
 function getFileIcon(filename) {
@@ -235,7 +248,7 @@ function renderAttachments(containerId, attachments) {
             <span class="attachment-icon">${getFileIcon(a.name)}</span>
             <span class="attachment-name">${a.name}</span>
             <span class="attachment-size">${a.size_mb} MB</span>
-            ${a.too_large ? '<span class="attachment-warning">⚠️ Too large</span>' : '✅'}
+            ${a.too_large ? '<span class="attachment-warning">⚠️ Too large for email (OK for WhatsApp)</span>' : '✅'}
         </div>
     `).join('');
 }
@@ -271,6 +284,16 @@ async function checkEmailStatus() {
         gmailStatusEl.value = "Error";
         gmailEmailEl.value = "API not reachable";
         document.getElementById('attachmentsList').innerHTML = '<p style="color:#dc3545">Cannot load attachments</p>';
+    }
+}
+
+async function checkWAPermission() {
+    try {
+        const r = await fetch(API + "/whatsapp/status");
+        const d = await r.json();
+        waPermissionGranted = d.permission_granted;
+    } catch (e) {
+        waPermissionGranted = false;
     }
 }
 
@@ -354,11 +377,14 @@ function render() {
         const emailBtnClass = emailSent ? 'btn btn-sent' : 'btn btn-email';
         const waBtnClass = waSent ? 'btn btn-sent' : 'btn btn-success';
         
+        // Contact info
+        const contact = e.email ? e.email : (e.phone ? e.phone : '<span style="color:#999">No contact</span>');
+        
         return `
         <tr>
             <td><b>${e.name}</b></td>
             <td>${e.type || "Unknown"}</td>
-            <td>${e.email || '<span style="color:#999">No email</span>'}</td>
+            <td style="font-size:12px">${contact}</td>
             <td>${e.city || ""}</td>
             <td>${statusHtml}</td>
             <td class="action-buttons">
@@ -381,13 +407,14 @@ function openModal(id) {
     
     document.getElementById("recipient").value = current.name;
     document.getElementById("recipientEmail").value = current.email || "No email available";
+    document.getElementById("recipientPhone").value = current.phone || "No phone available";
     document.getElementById("msgText").textContent = PROPOSAL_TEMPLATE.replace("Dear Sir / Madam", "Dear " + (current.name || "Sir / Madam"));
     document.getElementById("sendStatus").textContent = "";
     document.getElementById("includeAttachments").checked = true;
     
     // Show warning if already sent
     const warningEl = document.getElementById("alreadySentWarning");
-    if (current.email_sent === 1) {
+    if (current.email_sent === 1 || current.whatsapp_sent === 1) {
         warningEl.style.display = "block";
     } else {
         warningEl.style.display = "none";
@@ -419,7 +446,7 @@ function openModal(id) {
     }
     
     // Update WhatsApp button
-    if (!current.phone && !current.whatsapp) {
+    if (!current.phone) {
         sendWABtn.className = "btn btn-disabled";
         sendWABtn.innerHTML = "💬 WhatsApp";
     } else if (current.whatsapp_sent === 1) {
@@ -427,7 +454,7 @@ function openModal(id) {
         sendWABtn.innerHTML = "✓ Resend WA";
     } else {
         sendWABtn.className = "btn btn-success";
-        sendWABtn.innerHTML = "💬 WhatsApp";
+        sendWABtn.innerHTML = "💬 WhatsApp Direct";
     }
     
     document.getElementById("modal").classList.add("active");
@@ -437,19 +464,128 @@ function closeModal() {
     document.getElementById("modal").classList.remove("active");
 }
 
-async function markEmailSent(entityId) {
+function showPermissionModal(instructions) {
+    if (instructions && instructions.length > 0) {
+        const list = document.getElementById("permissionInstructions");
+        list.innerHTML = instructions.map(i => `<li>${i}</li>`).join('');
+    }
+    document.getElementById("permissionModal").classList.add("active");
+}
+
+function closePermissionModal() {
+    document.getElementById("permissionModal").classList.remove("active");
+    pendingWAEntity = null;
+}
+
+async function confirmPermission() {
     try {
-        await fetch(API + `/entities/${entityId}/mark-email-sent`, { method: "POST" });
+        await fetch(API + "/whatsapp/grant-permission", { method: "POST" });
+        waPermissionGranted = true;
+        toast("Permission confirmed! Retrying...", "success");
+        closePermissionModal();
+        
+        // Retry the pending WhatsApp send
+        if (pendingWAEntity) {
+            setTimeout(() => quickWA(pendingWAEntity), 500);
+            pendingWAEntity = null;
+        }
     } catch (e) {
-        console.error("Failed to mark email sent:", e);
+        toast("Error confirming permission", "error");
     }
 }
 
-async function markWhatsappSent(entityId) {
+// Quick WhatsApp from table button - DIRECT SEND
+async function quickWA(id) {
+    const entity = entities.find(e => e.id === id);
+    if (!entity || !entity.phone) {
+        toast("No phone number available", "error");
+        return;
+    }
+    
+    toast("Opening WhatsApp & sending...", "info");
+    
     try {
-        await fetch(API + `/entities/${entityId}/mark-whatsapp-sent`, { method: "POST" });
+        const r = await fetch(API + "/whatsapp/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                phone: entity.phone,
+                entity_id: entity.id,
+                direct_send: true
+            })
+        });
+        
+        const d = await r.json();
+        
+        if (d.needs_permission) {
+            // Show permission instructions
+            pendingWAEntity = id;
+            showPermissionModal(d.instructions);
+            return;
+        }
+        
+        if (d.success) {
+            toast("✅ WhatsApp message sent to " + entity.name, "success");
+            // Update local entity
+            entity.whatsapp_sent = 1;
+            render();
+            refresh();
+        } else {
+            toast("Error: " + (d.error || "Unknown error"), "error");
+        }
     } catch (e) {
-        console.error("Failed to mark WhatsApp sent:", e);
+        toast("Error sending WhatsApp: " + e.message, "error");
+    }
+}
+
+// Send WhatsApp from modal
+async function sendWA() {
+    if (!current || !current.phone) {
+        toast("No phone number", "error");
+        return;
+    }
+    
+    const statusEl = document.getElementById("sendStatus");
+    const sendBtn = document.getElementById("sendWABtn");
+    
+    statusEl.innerHTML = '<span class="loading"></span> Opening WhatsApp & sending message...';
+    sendBtn.disabled = true;
+    
+    try {
+        const r = await fetch(API + "/whatsapp/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                phone: current.phone,
+                entity_id: current.id,
+                direct_send: true
+            })
+        });
+        
+        const d = await r.json();
+        
+        if (d.needs_permission) {
+            statusEl.innerHTML = '⚠️ Accessibility permission required - see popup';
+            pendingWAEntity = current.id;
+            showPermissionModal(d.instructions);
+            sendBtn.disabled = false;
+            return;
+        }
+        
+        if (d.success) {
+            statusEl.innerHTML = '✅ WhatsApp message sent!';
+            toast("WhatsApp message sent!", "success");
+            sendBtn.className = "btn btn-sent";
+            sendBtn.innerHTML = "✓ Sent";
+            current.whatsapp_sent = 1;
+            refresh();
+        } else {
+            statusEl.innerHTML = '❌ Error: ' + (d.error || "Unknown");
+            sendBtn.disabled = false;
+        }
+    } catch (e) {
+        statusEl.innerHTML = '❌ Error: ' + e.message;
+        sendBtn.disabled = false;
     }
 }
 
@@ -492,89 +628,32 @@ async function sendEmail() {
             if (d.attachments && d.attachments.length > 0) {
                 msg += ' with ' + d.attachments.length + ' attachment(s)';
             }
-            if (d.skipped_attachments && d.skipped_attachments.length > 0) {
-                msg += '<br><span style="color:#dc3545">⚠️ Skipped: ' + d.skipped_attachments.join(', ') + '</span>';
-            }
             statusEl.innerHTML = msg;
             
-            // Update button to show sent
             sendBtn.className = "btn btn-sent";
-            sendBtn.innerHTML = "✓ Sent!";
-            
-            // Update local entity
-            current.email_sent = 1;
-            
-            refresh();
+            sendBtn.innerHTML = "✓ Sent";
             toast("Email sent successfully!", "success");
+            current.email_sent = 1;
+            refresh();
         } else {
-            statusEl.innerHTML = '❌ ' + (d.detail || d.error || "Failed to send");
-            toast("Failed: " + (d.detail || d.error), "error");
+            statusEl.innerHTML = '❌ Error: ' + (d.detail || d.error || "Unknown error");
+            sendBtn.disabled = false;
         }
     } catch (e) {
-        statusEl.innerHTML = '❌ Network error';
-        toast("Network error", "error");
+        statusEl.innerHTML = '❌ Error: ' + e.message;
+        sendBtn.disabled = false;
     }
-    
-    sendBtn.disabled = false;
-}
-
-async function sendWA() {
-    if (!current) return;
-    
-    const phone = (current.phone || current.whatsapp || "").replace(/\D/g, "");
-    
-    if (!phone) {
-        toast("No phone number available", "error");
-        return;
-    }
-    
-    const msg = encodeURIComponent(PROPOSAL_TEMPLATE.replace("Dear Sir / Madam", "Dear " + (current.name || "Sir / Madam")));
-    window.open("https://wa.me/" + phone + "?text=" + msg);
-    
-    // Mark as sent
-    await markWhatsappSent(current.id);
-    current.whatsapp_sent = 1;
-    
-    // Update button
-    const sendWABtn = document.getElementById("sendWABtn");
-    sendWABtn.className = "btn btn-sent";
-    sendWABtn.innerHTML = "✓ Sent!";
-    
-    refresh();
-    toast("WhatsApp opened!", "success");
-}
-
-async function quickWA(id) {
-    const e = entities.find(x => x.id === id);
-    if (!e) return;
-    
-    const phone = (e.phone || e.whatsapp || "").replace(/\D/g, "");
-    
-    if (!phone) {
-        toast("No phone number", "error");
-        return;
-    }
-    
-    const msg = encodeURIComponent(PROPOSAL_TEMPLATE.replace("Dear Sir / Madam", "Dear " + (e.name || "Sir / Madam")));
-    window.open("https://wa.me/" + phone + "?text=" + msg);
-    
-    // Mark as sent
-    await markWhatsappSent(e.id);
-    
-    refresh();
-    toast("WhatsApp opened!", "success");
 }
 
 function exportCSV() {
-    window.open(API + "/export/csv");
-    toast("Download started!", "success");
+    window.open(API + "/export/csv", "_blank");
 }
 
-function toast(m, type = "success") {
+function toast(msg, type) {
     const t = document.getElementById("toast");
-    t.textContent = m;
+    t.textContent = msg;
     t.className = "toast show " + type;
-    setTimeout(() => t.classList.remove("show"), 3000);
+    setTimeout(() => t.classList.remove("show"), 4000);
 }
 </script>
 </body>
