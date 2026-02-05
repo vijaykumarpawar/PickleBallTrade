@@ -40,11 +40,14 @@ class EmailRequest(BaseModel):
     subject: Optional[str] = "Pickleball Partnership Opportunity - Manh Thang Factory"
     recipient_name: Optional[str] = None
     custom_body: Optional[str] = None
+    include_attachments: bool = True
+    attachment_files: Optional[List[str]] = None
 
 
 class BulkEmailRequest(BaseModel):
     recipients: List[dict]  # List of {"email": "...", "name": "..."}
     subject: Optional[str] = "Pickleball Partnership Opportunity - Manh Thang Factory"
+    include_attachments: bool = True
 
 
 @app.get("/")
@@ -103,21 +106,35 @@ async def list_cities():
 
 @app.get("/email/status")
 async def email_status():
-    """Check if email service is configured."""
+    """Check if email service is configured and list available attachments."""
+    attachments = email_service.get_available_attachments()
     return {
         "configured": email_service.is_configured(),
-        "sender": email_service.sender_email if email_service.is_configured() else None
+        "sender": email_service.sender_email if email_service.is_configured() else None,
+        "attachments": attachments,
+        "default_attachments": email_service.DEFAULT_ATTACHMENTS
+    }
+
+
+@app.get("/email/attachments")
+async def list_attachments():
+    """List available attachment files from uploads folder."""
+    return {
+        "attachments": email_service.get_available_attachments(),
+        "default_attachments": email_service.DEFAULT_ATTACHMENTS
     }
 
 
 @app.post("/email/send")
 async def send_email(request: EmailRequest):
-    """Send a single email with the proposal."""
+    """Send a single email with the proposal and attachments."""
     result = email_service.send_email(
         to_email=request.to_email,
         subject=request.subject,
         body=request.custom_body,
-        recipient_name=request.recipient_name
+        recipient_name=request.recipient_name,
+        include_attachments=request.include_attachments,
+        attachment_files=request.attachment_files
     )
     
     if not result.get("success"):
@@ -128,17 +145,22 @@ async def send_email(request: EmailRequest):
 
 @app.post("/email/send-bulk")
 async def send_bulk_emails(request: BulkEmailRequest):
-    """Send emails to multiple recipients."""
+    """Send emails to multiple recipients with attachments."""
     result = email_service.send_bulk_emails(
         recipients=request.recipients,
-        subject=request.subject
+        subject=request.subject,
+        include_attachments=request.include_attachments
     )
     return result
 
 
 @app.post("/email/send-to-entity/{entity_id}")
-async def send_email_to_entity(entity_id: int, subject: Optional[str] = None):
-    """Send email to a specific entity by ID."""
+async def send_email_to_entity(
+    entity_id: int,
+    subject: Optional[str] = None,
+    include_attachments: bool = True
+):
+    """Send email to a specific entity by ID with attachments."""
     entities = db.get_all_entities()
     entity = next((e for e in entities if e.get("id") == entity_id), None)
     
@@ -151,7 +173,8 @@ async def send_email_to_entity(entity_id: int, subject: Optional[str] = None):
     result = email_service.send_email(
         to_email=entity["email"],
         subject=subject or "Pickleball Partnership Opportunity - Manh Thang Factory",
-        recipient_name=entity.get("name")
+        recipient_name=entity.get("name"),
+        include_attachments=include_attachments
     )
     
     if not result.get("success"):
