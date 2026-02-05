@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Pickleball Trade</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;padding:20px}
+.container{max-width:1200px;margin:0 auto}
+.header{text-align:center;color:white;margin-bottom:30px}
+.card{background:white;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 10px 40px rgba(0,0,0,0.2)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-weight:600;margin-bottom:8px}
+.form-group input,.form-group select{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px}
+.btn{padding:12px 24px;border:none;border-radius:8px;font-weight:600;cursor:pointer}
+.btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:white}
+.btn-success{background:#25D366;color:white}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.stat{background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:20px;border-radius:12px;text-align:center}
+table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center}
+.modal.active{display:flex}
+.modal-content{background:white;border-radius:16px;padding:30px;max-width:600px;width:90%}
+.toast{position:fixed;bottom:20px;right:20px;background:#28a745;color:white;padding:16px 24px;border-radius:8px;display:none}
+.toast.show{display:block}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header"><h1>Pickleball Trade</h1><p>Outreach Dashboard</p></div>
+<div class="card"><h2>Your Contact Details</h2>
+<div class="grid">
+<div class="form-group"><label>Email</label><input type="email" id="userEmail" placeholder="your@email.com"></div>
+<div class="form-group"><label>Mobile</label><input type="tel" id="userMobile" placeholder="+91 98765 43210"></div>
+</div>
+<button class="btn btn-primary" onclick="saveConfig()">Save</button>
+</div>
+<div class="card"><h2>Discover Leads</h2>
+<div class="grid">
+<div class="form-group"><label>City</label><select id="city"><option value="">Select</option></select></div>
+<div class="form-group"><label>Limit</label><input type="number" id="limit" value="5" style="width:100px"></div>
+</div>
+<button class="btn btn-primary" onclick="discover()">Discover</button>
+</div>
+<div class="stats">
+<div class="stat"><h3 id="total">0</h3><p>Total</p></div>
+<div class="stat"><h3 id="high">0</h3><p>Types</p></div>
+<div class="stat"><h3 id="emails">0</h3><p>Emails</p></div>
+<div class="stat"><h3 id="whatsapps">0</h3><p>WhatsApp</p></div>
+</div>
+<div class="card">
+<div style="display:flex;justify-content:space-between;margin-bottom:20px">
+<h2>Leads</h2>
+<div>
+<button class="btn btn-primary" onclick="refresh()">Refresh</button>
+<button class="btn btn-primary" onclick="exportCSV()">Export</button>
+</div>
+</div>
+<table><thead><tr><th>Name</th><th>Type</th><th>City</th><th>Actions</th></tr></thead>
+<tbody id="tbody"><tr><td colspan="4" style="text-align:center">Loading...</td></tr></tbody>
+</table>
+</div>
+</div>
+<div class="modal" id="modal">
+<div class="modal-content">
+<h2>Send Proposal</h2>
+<div class="form-group"><label>To</label><input id="recipient" readonly></div>
+<div class="form-group"><label>Message</label><div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap"></div></div>
+<div style="display:flex;gap:8px">
+<button class="btn btn-primary" onclick="sendEmail()">Send Email</button>
+<button class="btn btn-success" onclick="sendWA()">WhatsApp</button>
+<button class="btn" onclick="closeModal()">Close</button>
+</div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const API="http://localhost:8000";
+let entities=[],current=null,emailCount=0,waCount=0;
+document.addEventListener("DOMContentLoaded",()=>{
+document.getElementById("userEmail").value=localStorage.getItem("userEmail")||"";
+document.getElementById("userMobile").value=localStorage.getItem("userMobile")||"";
+loadCities();refresh();
+});
+function saveConfig(){
+localStorage.setItem("userEmail",document.getElementById("userEmail").value);
+localStorage.setItem("userMobile",document.getElementById("userMobile").value);
+toast("Saved!");
+}
+async function loadCities(){
+try{const r=await fetch(API+"/cities");const d=await r.json();
+const s=document.getElementById("city");
+d.cities.forEach(c=>{const o=document.createElement("option");o.value=c.name;o.textContent=c.name;s.appendChild(o);});
+}catch(e){console.error(e);}
+}
+async function discover(){
+const city=document.getElementById("city").value;
+const limit=document.getElementById("limit").value;
+if(!city){toast("Select city");return;}
+try{
+const r=await fetch(API+"/discover",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({city,limit:parseInt(limit)})});
+const d=await r.json();
+toast("Found "+d.discovered+" leads!");
+refresh();
+}catch(e){toast("Error");}
+}
+async function refresh(){
+try{
+const r=await fetch(API+"/entities");const d=await r.json();
+entities=d.entities||[];
+render();
+const s=await(await fetch(API+"/stats")).json();
+document.getElementById("total").textContent=s.total_entities||0;
+document.getElementById("high").textContent=Object.keys(s.by_type||{}).length;
+}catch(e){document.getElementById("tbody").innerHTML="<tr><td colspan=4>API not running</td></tr>";}
+document.getElementById("emails").textContent=emailCount;
+document.getElementById("whatsapps").textContent=waCount;
+}
+function render(){
+const t=document.getElementById("tbody");
+if(entities.length===0){t.innerHTML="<tr><td colspan=4 style=text-align:center>No leads</td></tr>";return;}
+t.innerHTML=entities.map(e=>"<tr><td><b>"+e.name+"</b></td><td>"+(e.type||"Unknown")+"</td><td>"+(e.city||"")+"</td><td><button class=btn style=margin:2px onclick=openModal("+e.id+")>Email</button><button class=btn style=background:#25D366;color:white;margin:2px onclick=quickWA("+e.id+")>WA</button></td></tr>").join("");
+}
+async function openModal(id){
+current=entities.find(e=>e.id===id);
+if(!current)return;
+try{
+const r=await fetch(API+"/generate-proposal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({entity_id:id})});
+const p=await r.json();
+document.getElementById("recipient").value=current.name;
+document.getElementById("msgText").textContent=p.whatsapp_message||p.email_proposal;
+document.getElementById("modal").classList.add("active");
+}catch(e){toast("Error");}
+}
+function closeModal(){document.getElementById("modal").classList.remove("active");}
+function sendEmail(){
+const subj=encodeURIComponent("Pickleball Partnership");
+const body=encodeURIComponent(document.getElementById("msgText").textContent);
+window.open("mailto:"+(current.email||"")+"?subject="+subj+"&body="+body);
+emailCount++;refresh();toast("Email opened!");
+}
+function sendWA(){
+const msg=encodeURIComponent(document.getElementById("msgText").textContent);
+const phone=(current.phone||current.whatsapp||"").replace(/\D/g,"");
+window.open("https://wa.me/"+phone+"?text="+msg);
+waCount++;refresh();toast("WhatsApp opened!");
+}
+async function quickWA(id){
+const e=entities.find(x=>x.id===id);if(!e)return;
+try{
+const r=await fetch(API+"/generate-proposal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({entity_id:id})});
+const p=await r.json();
+const msg=encodeURIComponent(p.whatsapp_message);
+const phone=(e.phone||e.whatsapp||"").replace(/\D/g,"");
+window.open("https://wa.me/"+phone+"?text="+msg);
+waCount++;refresh();toast("WhatsApp opened!");
+}catch(err){toast("Error");}
+}
+function exportCSV(){window.open(API+"/export/csv");toast("Downloaded!");}
+function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),3000);}
+</script>
+</body>
+</html>

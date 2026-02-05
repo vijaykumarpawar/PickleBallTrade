@@ -1,0 +1,35 @@
+{
+  "tier_1": [
+    "Mumbai",
+    "Delhi",
+    "Bangalore",
+    "Hyderabad",
+    "Chennai",
+    "Pune",
+    "Kolkata"
+  ],
+  "tier_2": [
+    "Ahmedabad",
+    "Jaipur",
+    "Lucknow",
+    "Chandigarh",
+    "Gurgaon",
+    "Noida",
+    "Kochi",
+    "Indore",
+    "Coimbatore",
+    "Visakhapatnam"
+  ],
+  "tier_3": [
+    "Nagpur",
+    "Surat",
+    "Bhopal",
+    "Ludhiana",
+    "Agra",
+    "Nashik",
+    "Vadodara",
+    "Mysore",
+    "Guwahati",
+    "Dehradun"
+  ]
+}
