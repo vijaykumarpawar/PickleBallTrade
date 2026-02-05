@@ -8,6 +8,7 @@ body{font-family:system-ui;background:linear-gradient(135deg,#667eea,#764ba2);mi
 .header{text-align:center;color:white;margin-bottom:30px}
 .card{background:white;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 10px 40px rgba(0,0,0,0.2)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-weight:600;margin-bottom:8px}
 .form-group input,.form-group select{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px}
@@ -16,9 +17,9 @@ body{font-family:system-ui;background:linear-gradient(135deg,#667eea,#764ba2);mi
 .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:white}
 .btn-success{background:#25D366;color:white}
 .btn-email{background:linear-gradient(135deg,#4285f4,#34a853);color:white}
+.btn-warning{background:#ffc107;color:#333}
 .btn-disabled{background:#ccc;cursor:not-allowed}
 .btn-disabled:hover{transform:none;box-shadow:none}
-/* Sent status buttons */
 .btn-sent{background:linear-gradient(135deg,#28a745,#20c997);color:white;position:relative}
 .btn-sent::after{content:'✓';position:absolute;top:-5px;right:-5px;background:#fff;color:#28a745;border-radius:50%;width:18px;height:18px;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.2)}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
@@ -51,49 +52,83 @@ th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
 .checkbox-group{display:flex;align-items:center;gap:8px;margin:12px 0}
 .checkbox-group input[type="checkbox"]{width:18px;height:18px}
 .sent-badge{display:inline-flex;align-items:center;gap:4px;background:#d4edda;color:#155724;padding:2px 8px;border-radius:12px;font-size:11px;margin-left:8px}
+.source-badge{display:inline-flex;align-items:center;gap:4px;background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:12px;font-size:10px}
 .action-buttons{display:flex;gap:4px;align-items:center}
 .permission-modal{background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px;margin:16px 0}
 .permission-modal h4{color:#856404;margin-bottom:12px}
 .permission-modal ol{margin-left:20px;color:#856404}
 .permission-modal li{margin-bottom:8px}
+.strategy-select{font-size:13px;padding:8px}
+.strategy-desc{font-size:11px;color:#666;margin-top:4px}
+.image-preview{max-width:100px;max-height:100px;border-radius:8px;margin:8px 0}
 </style>
 </head>
 <body>
 <div class="container">
 <div class="header">
 <h1>🏓 Pickleball Trade</h1>
-<p>Outreach Dashboard</p>
+<p>Outreach Dashboard - Multi-Source Lead Discovery</p>
 <div id="emailStatus" class="email-status not-configured" style="margin-top:12px">
 Checking email status...
 </div>
 </div>
 
-<div class="card"><h2>📧 Email Configuration</h2>
-<p style="margin-bottom:16px;color:#666">Configure Gmail credentials in the <code>.env</code> file on the server:</p>
+<div class="card"><h2>🔍 Discover Leads</h2>
+<p style="color:#666;margin-bottom:16px">Find distributors, wholesalers, and dealers across multiple sources</p>
+<div class="grid-3">
+<div class="form-group">
+<label>City</label>
+<select id="city"><option value="">Select City</option></select>
+</div>
+<div class="form-group">
+<label>Limit</label>
+<input type="number" id="limit" value="10" min="5" max="50">
+</div>
+<div class="form-group">
+<label>Search Strategy</label>
+<select id="strategy" class="strategy-select">
+<option value="">🎯 Auto (Recommended)</option>
+<option value="directories">📁 Industry Directories (IndiaMART, TradeIndia, JustDial)</option>
+<option value="manufacturers">🏭 Manufacturer Distributor Lists</option>
+<option value="google">🔍 Google Advanced Search</option>
+<option value="linkedin">💼 LinkedIn Profiles</option>
+<option value="yellowpages">📒 Yellow Pages & Chambers</option>
+<option value="marketplaces">🛒 Marketplace Sellers</option>
+<option value="sports_shops">🏸 Related Sports Shops</option>
+</select>
+</div>
+</div>
+<div class="checkbox-group">
+<input type="checkbox" id="deepSearch">
+<label for="deepSearch" style="margin:0;font-weight:normal">🚀 Deep Search - Use ALL strategies (slower but finds more leads)</label>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-primary" onclick="discover()">🔍 Discover Leads</button>
+<button class="btn btn-warning" onclick="discoverAll()">🌐 Discover All Cities</button>
+</div>
+<div id="discoverStatus" class="send-status" style="margin-top:12px"></div>
+</div>
+
+<div class="card"><h2>📧 Email & WhatsApp Configuration</h2>
 <div class="grid">
-<div class="form-group"><label>GMAIL_EMAIL</label><input type="text" id="gmailEmail" placeholder="Configured on server" readonly style="background:#f8f9fa"></div>
+<div>
+<h4 style="margin-bottom:12px">Gmail Status</h4>
+<div class="form-group"><label>Email</label><input type="text" id="gmailEmail" placeholder="Configured on server" readonly style="background:#f8f9fa"></div>
 <div class="form-group"><label>Status</label><input type="text" id="gmailStatus" placeholder="Checking..." readonly style="background:#f8f9fa"></div>
 </div>
-
-<h3 style="margin-top:20px;margin-bottom:12px">📎 Email Attachments</h3>
+<div>
+<h4 style="margin-bottom:12px">📎 Attachments</h4>
 <div id="attachmentsList" class="attachment-list">
-<p style="color:#666;text-align:center">Loading attachments...</p>
+<p style="color:#666;text-align:center">Loading...</p>
 </div>
-
-<button class="btn btn-primary" style="margin-top:16px" onclick="checkEmailStatus()">🔄 Check Status</button>
 </div>
-
-<div class="card"><h2>🔍 Discover Leads</h2>
-<div class="grid">
-<div class="form-group"><label>City</label><select id="city"><option value="">Select</option></select></div>
-<div class="form-group"><label>Limit</label><input type="number" id="limit" value="5" style="width:100px"></div>
 </div>
-<button class="btn btn-primary" onclick="discover()">Discover</button>
+<button class="btn btn-primary" style="margin-top:16px" onclick="checkEmailStatus()">🔄 Refresh Status</button>
 </div>
 
 <div class="stats">
 <div class="stat"><h3 id="total">0</h3><p>Total Leads</p></div>
-<div class="stat"><h3 id="high">0</h3><p>Types</p></div>
+<div class="stat"><h3 id="high">0</h3><p>Business Types</p></div>
 <div class="stat success"><h3 id="emails">0</h3><p>📧 Emails Sent</p></div>
 <div class="stat success"><h3 id="whatsapps">0</h3><p>💬 WhatsApp Sent</p></div>
 </div>
@@ -102,17 +137,17 @@ Checking email status...
 <div style="display:flex;justify-content:space-between;margin-bottom:20px">
 <h2>📋 Leads</h2>
 <div>
-<button class="btn btn-primary" onclick="refresh()">Refresh</button>
-<button class="btn btn-primary" onclick="exportCSV()">Export CSV</button>
+<button class="btn btn-primary" onclick="refresh()">🔄 Refresh</button>
+<button class="btn btn-primary" onclick="exportCSV()">📥 Export CSV</button>
 </div>
 </div>
-<table><thead><tr><th>Name</th><th>Type</th><th>Contact</th><th>City</th><th>Status</th><th>Actions</th></tr></thead>
+<table><thead><tr><th>Business</th><th>Type</th><th>Contact</th><th>Source</th><th>Status</th><th>Actions</th></tr></thead>
 <tbody id="tbody"><tr><td colspan="6" style="text-align:center">Loading...</td></tr></tbody>
 </table>
 </div>
 </div>
 
-<!-- Permission Request Modal -->
+<!-- Permission Modal -->
 <div class="modal" id="permissionModal">
 <div class="modal-content">
 <h2>🔐 Accessibility Permission Required</h2>
@@ -122,7 +157,7 @@ Checking email status...
 <li>Open <b>System Settings</b> on your Mac</li>
 <li>Go to <b>Privacy & Security → Accessibility</b></li>
 <li>Click the lock icon to make changes</li>
-<li>Add and enable <b>Terminal</b> (or VS Code if running from IDE)</li>
+<li>Add and enable <b>Terminal</b> (or VS Code)</li>
 <li>Click "Done" below after granting permission</li>
 </ol>
 </div>
@@ -133,33 +168,42 @@ Checking email status...
 </div>
 </div>
 
+<!-- Send Modal -->
 <div class="modal" id="modal">
 <div class="modal-content">
 <h2>📤 Send Proposal</h2>
 <div id="alreadySentWarning" style="display:none;background:#fff3cd;color:#856404;padding:12px;border-radius:8px;margin-bottom:16px">
 ⚠️ Message already sent to this lead. Send again?
 </div>
-<div class="form-group"><label>To</label><input id="recipient" readonly style="background:#f8f9fa"></div>
+<div class="grid">
+<div class="form-group"><label>Business</label><input id="recipient" readonly style="background:#f8f9fa"></div>
+<div class="form-group"><label>Type</label><input id="recipientType" readonly style="background:#f8f9fa"></div>
+</div>
+<div class="grid">
 <div class="form-group"><label>Email</label><input id="recipientEmail" readonly style="background:#f8f9fa"></div>
 <div class="form-group"><label>Phone</label><input id="recipientPhone" readonly style="background:#f8f9fa"></div>
+</div>
 <div class="form-group"><label>Subject</label><input id="emailSubject" value="Pickleball Partnership Opportunity - Manh Thang Factory"></div>
 
 <div class="checkbox-group">
 <input type="checkbox" id="includeAttachments" checked>
-<label for="includeAttachments" style="margin:0;font-weight:normal">📎 Include email attachments (PDF brochure + Product image)</label>
+<label for="includeAttachments" style="margin:0;font-weight:normal">📎 Include email attachments</label>
+</div>
+<div class="checkbox-group">
+<input type="checkbox" id="includeWAImage" checked>
+<label for="includeWAImage" style="margin:0;font-weight:normal">🖼️ Include product image in WhatsApp</label>
 </div>
 
-<div id="modalAttachments" class="attachment-list" style="margin-bottom:16px">
-</div>
+<div id="modalAttachments" class="attachment-list" style="margin-bottom:16px"></div>
 
 <div class="form-group">
 <label>Message Preview</label>
-<div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap;max-height:200px;overflow-y:auto;font-size:13px"></div>
+<div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap;max-height:150px;overflow-y:auto;font-size:12px"></div>
 </div>
 <div id="sendStatus" class="send-status"></div>
 <div style="display:flex;gap:8px;margin-top:16px">
 <button class="btn btn-email" id="sendEmailBtn" onclick="sendEmail()">📧 Send Email</button>
-<button class="btn btn-success" id="sendWABtn" onclick="sendWA()">💬 WhatsApp Direct</button>
+<button class="btn btn-success" id="sendWABtn" onclick="sendWA()">💬 WhatsApp + Image</button>
 <button class="btn" onclick="closeModal()">Close</button>
 </div>
 </div>
@@ -176,51 +220,30 @@ let pendingWAEntity = null;
 
 const PROPOSAL_TEMPLATE = `Dear Sir / Madam,
 
-Greetings.
+Greetings from Manh Thang Pickleball Factory! 🏓
 
-We are pleased to introduce Manh Thang Industrial Service Development Company Limited (Vietnam), a specialized manufacturer and OEM producer of tournament-grade pickleball balls, and propose a potential collaboration for bulk supply and distribution in the Indian market.
+We are a leading manufacturer of tournament-grade pickleball equipment from Vietnam, looking for distribution partners in India.
 
-Manh Thang Pickleball Factory operates with advanced rotational hot molding technology, strict quality management systems, and international compliance standards. The factory currently supplies to domestic and export markets including the USA and Europe.
+✅ Our Products:
+• USAPA-certified pickleball balls
+• Premium paddles & nets
+• OEM/private label available
 
-✅ Product Highlight – E-WIN (ONE WIN) Pickleball Balls
-• Certified compliant with USA Pickleball Association (USAPA) standards
-• Designed for international competition and tournaments
-• Indoor ball weight: ~26 g / Outdoor ball weight: ~26.5 g
-• Diameter: 74 mm (±5%)
-• Hardness: 44–46 HD (balanced control & durability)
-• 40 precision-drilled holes
+🏭 Factory Capacity: 25,000-30,000 balls/day
 
-🏭 Manufacturing Strength
-• 5 automatic rotational casting technology production lines
-• Current capacity: 25,000–30,000 balls per day
-• Factory area: over 7,000 m² | 65 skilled staff members
+🤝 Partnership Benefits:
+• Factory-direct competitive pricing
+• Bulk order discounts
+• Reliable delivery schedules
 
-📦 Product Portfolio
-• S2 Tournament Pickleball
-• E-WIN (ONE WIN) Tournament Series
-• Vincent Series, Multi-color Pickleballs
-• 100% Biodegradable Pickleballs (eco-friendly option)
-
-🤝 Why Partner With Manh Thang
-• Consistent tournament-grade quality
-• Competitive factory-direct pricing
-• OEM / Private label manufacturing available
-• Reliable production capacity & delivery schedules
-
-📞 Factory Contact (Vietnam – Head Office)
-Manh Thang Industrial Service Development Company Limited
-Phone: +84 91 253 16 66
-Email: manhthang2666@gmail.com
-Website: www.manhthangpickleballfactory.com
-
-For India coordination:
-Vijay Pawar
-Mobile / WhatsApp: +91-7975397211
+📞 Contact:
+Vijay Pawar (India)
+WhatsApp: +91-7975397211
 Email: vijaykp.kp@gmail.com
 
-Looking forward to your positive response!
+Looking forward to your response!
 
-Warm regards,
+Best regards,
 Vijay Pawar`;
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -232,58 +255,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function getFileIcon(filename) {
     if (filename.toLowerCase().endsWith('.pdf')) return '📄';
-    if (filename.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/)) return '🖼️';
+    if (filename.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp)$/)) return '🖼️';
     return '📎';
 }
 
 function renderAttachments(containerId, attachments) {
     const container = document.getElementById(containerId);
     if (!attachments || attachments.length === 0) {
-        container.innerHTML = '<p style="color:#666;text-align:center;font-size:13px">No attachments in uploads folder</p>';
+        container.innerHTML = '<p style="color:#666;text-align:center;font-size:13px">No attachments</p>';
         return;
     }
-    
     container.innerHTML = attachments.map(a => `
         <div class="attachment-item">
             <span class="attachment-icon">${getFileIcon(a.name)}</span>
             <span class="attachment-name">${a.name}</span>
             <span class="attachment-size">${a.size_mb} MB</span>
-            ${a.too_large ? '<span class="attachment-warning">⚠️ Too large for email (OK for WhatsApp)</span>' : '✅'}
+            ${a.too_large ? '<span class="attachment-warning">⚠️ Too large for email</span>' : '✅'}
         </div>
     `).join('');
 }
 
 async function checkEmailStatus() {
-    const statusEl = document.getElementById("emailStatus");
-    const gmailStatusEl = document.getElementById("gmailStatus");
-    const gmailEmailEl = document.getElementById("gmailEmail");
-    
     try {
         const r = await fetch(API + "/email/status");
         const d = await r.json();
         emailConfigured = d.configured;
         availableAttachments = d.attachments || [];
         
+        const statusEl = document.getElementById("emailStatus");
         if (d.configured) {
             statusEl.className = "email-status configured";
-            statusEl.innerHTML = "✅ Email configured: " + d.sender;
-            gmailStatusEl.value = "✓ Configured";
-            gmailEmailEl.value = d.sender;
+            statusEl.innerHTML = "✅ Email: " + d.sender;
+            document.getElementById("gmailStatus").value = "✓ Configured";
+            document.getElementById("gmailEmail").value = d.sender;
         } else {
             statusEl.className = "email-status not-configured";
-            statusEl.innerHTML = "⚠️ Email not configured - Set GMAIL_EMAIL & GMAIL_APP_PASSWORD in .env";
-            gmailStatusEl.value = "✗ Not configured";
-            gmailEmailEl.value = "Not set";
+            statusEl.innerHTML = "⚠️ Email not configured";
+            document.getElementById("gmailStatus").value = "✗ Not configured";
+            document.getElementById("gmailEmail").value = "Set .env file";
         }
-        
         renderAttachments('attachmentsList', availableAttachments);
-        
     } catch (e) {
-        statusEl.className = "email-status not-configured";
-        statusEl.innerHTML = "❌ Cannot connect to API";
-        gmailStatusEl.value = "Error";
-        gmailEmailEl.value = "API not reachable";
-        document.getElementById('attachmentsList').innerHTML = '<p style="color:#dc3545">Cannot load attachments</p>';
+        document.getElementById("emailStatus").innerHTML = "❌ API not reachable";
     }
 }
 
@@ -292,9 +305,7 @@ async function checkWAPermission() {
         const r = await fetch(API + "/whatsapp/status");
         const d = await r.json();
         waPermissionGranted = d.permission_granted;
-    } catch (e) {
-        waPermissionGranted = false;
-    }
+    } catch (e) {}
 }
 
 async function loadCities() {
@@ -305,34 +316,68 @@ async function loadCities() {
         d.cities.forEach(c => {
             const o = document.createElement("option");
             o.value = c.name;
-            o.textContent = c.name;
+            o.textContent = `${c.name} (${c.tier})`;
             s.appendChild(o);
         });
-    } catch (e) {
-        console.error(e);
-    }
+    } catch (e) {}
 }
 
 async function discover() {
     const city = document.getElementById("city").value;
     const limit = document.getElementById("limit").value;
-    if (!city) {
-        toast("Select a city", "error");
-        return;
-    }
+    const strategy = document.getElementById("strategy").value;
+    const deepSearch = document.getElementById("deepSearch").checked;
+    
+    if (!city) { toast("Select a city", "error"); return; }
+    
+    const statusEl = document.getElementById("discoverStatus");
+    statusEl.innerHTML = '<span class="loading"></span> Discovering leads using ' + (deepSearch ? 'deep search (all strategies)' : strategy || 'auto strategy') + '...';
+    
     try {
-        toast("Discovering leads...", "info");
         const r = await fetch(API + "/discover", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ city, limit: parseInt(limit) })
+            body: JSON.stringify({ 
+                city, 
+                limit: parseInt(limit),
+                strategy: strategy || null,
+                deep_search: deepSearch
+            })
         });
         const d = await r.json();
-        toast("Found " + d.discovered + " leads!", "success");
+        statusEl.innerHTML = `✅ Found ${d.discovered} leads from: ${d.sources?.join(', ') || 'web_search'}`;
+        toast(`Found ${d.discovered} leads!`, "success");
         refresh();
     } catch (e) {
+        statusEl.innerHTML = '❌ Error discovering leads';
         toast("Error discovering leads", "error");
     }
+}
+
+async function discoverAll() {
+    if (!confirm("This will search ALL cities. It may take a while. Continue?")) return;
+    
+    const statusEl = document.getElementById("discoverStatus");
+    const cities = [...document.getElementById("city").options].slice(1).map(o => o.value);
+    
+    statusEl.innerHTML = `<span class="loading"></span> Searching ${cities.length} cities...`;
+    
+    let total = 0;
+    for (const city of cities) {
+        try {
+            const r = await fetch(API + "/discover", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ city, limit: 5 })
+            });
+            const d = await r.json();
+            total += d.discovered;
+            statusEl.innerHTML = `<span class="loading"></span> ${city}: Found ${d.discovered} | Total: ${total}`;
+        } catch (e) {}
+    }
+    
+    statusEl.innerHTML = `✅ Complete! Found ${total} leads across ${cities.length} cities`;
+    refresh();
 }
 
 async function refresh() {
@@ -362,38 +407,27 @@ function render() {
         const emailSent = e.email_sent === 1;
         const waSent = e.whatsapp_sent === 1;
         
-        // Status badges
-        let statusHtml = '';
-        if (emailSent || waSent) {
-            statusHtml = '<div style="display:flex;gap:4px;flex-wrap:wrap">';
-            if (emailSent) statusHtml += '<span class="sent-badge">📧 ✓</span>';
-            if (waSent) statusHtml += '<span class="sent-badge">💬 ✓</span>';
-            statusHtml += '</div>';
-        } else {
-            statusHtml = '<span style="color:#999">—</span>';
-        }
+        let statusHtml = emailSent || waSent ? 
+            `<div style="display:flex;gap:4px">${emailSent ? '<span class="sent-badge">📧✓</span>' : ''}${waSent ? '<span class="sent-badge">💬✓</span>' : ''}</div>` : 
+            '<span style="color:#999">—</span>';
         
-        // Button classes based on sent status
-        const emailBtnClass = emailSent ? 'btn btn-sent' : 'btn btn-email';
-        const waBtnClass = waSent ? 'btn btn-sent' : 'btn btn-success';
-        
-        // Contact info
         const contact = e.email ? e.email : (e.phone ? e.phone : '<span style="color:#999">No contact</span>');
+        const source = e.source ? `<span class="source-badge">${e.source}</span>` : '';
         
         return `
         <tr>
-            <td><b>${e.name}</b></td>
+            <td><b>${e.name}</b><br><small style="color:#666">${e.city || ''}</small></td>
             <td>${e.type || "Unknown"}</td>
-            <td style="font-size:12px">${contact}</td>
-            <td>${e.city || ""}</td>
+            <td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis">${contact}</td>
+            <td>${source}</td>
             <td>${statusHtml}</td>
             <td class="action-buttons">
-                <button class="${emailBtnClass}" style="padding:8px 12px;margin:2px" 
-                    onclick="openModal(${e.id})" ${!e.email ? 'disabled title="No email"' : ''}>
+                <button class="${emailSent ? 'btn btn-sent' : 'btn btn-email'}" style="padding:6px 10px;font-size:12px" 
+                    onclick="openModal(${e.id})" ${!e.email ? 'disabled' : ''}>
                     ${emailSent ? '✓' : '📧'}
                 </button>
-                <button class="${waBtnClass}" style="padding:8px 12px;margin:2px" 
-                    onclick="quickWA(${e.id})" ${!e.phone ? 'disabled title="No phone"' : ''}>
+                <button class="${waSent ? 'btn btn-sent' : 'btn btn-success'}" style="padding:6px 10px;font-size:12px" 
+                    onclick="quickWA(${e.id})" ${!e.phone ? 'disabled' : ''}>
                     ${waSent ? '✓' : '💬'}
                 </button>
             </td>
@@ -406,166 +440,106 @@ function openModal(id) {
     if (!current) return;
     
     document.getElementById("recipient").value = current.name;
-    document.getElementById("recipientEmail").value = current.email || "No email available";
-    document.getElementById("recipientPhone").value = current.phone || "No phone available";
-    document.getElementById("msgText").textContent = PROPOSAL_TEMPLATE.replace("Dear Sir / Madam", "Dear " + (current.name || "Sir / Madam"));
+    document.getElementById("recipientType").value = current.type || "Unknown";
+    document.getElementById("recipientEmail").value = current.email || "No email";
+    document.getElementById("recipientPhone").value = current.phone || current.whatsapp || "No phone";
+    document.getElementById("msgText").textContent = PROPOSAL_TEMPLATE;
     document.getElementById("sendStatus").textContent = "";
-    document.getElementById("includeAttachments").checked = true;
     
-    // Show warning if already sent
     const warningEl = document.getElementById("alreadySentWarning");
-    if (current.email_sent === 1 || current.whatsapp_sent === 1) {
-        warningEl.style.display = "block";
-    } else {
-        warningEl.style.display = "none";
-    }
+    warningEl.style.display = (current.email_sent === 1 || current.whatsapp_sent === 1) ? "block" : "none";
     
-    // Render attachments in modal
-    renderAttachments('modalAttachments', availableAttachments.filter(a => !a.too_large));
+    renderAttachments('modalAttachments', availableAttachments);
     
     const sendBtn = document.getElementById("sendEmailBtn");
     const sendWABtn = document.getElementById("sendWABtn");
     
-    // Update email button
-    if (!emailConfigured) {
-        sendBtn.className = "btn btn-disabled";
-        sendBtn.title = "Configure email in .env file";
-        sendBtn.innerHTML = "📧 Send Email";
-    } else if (!current.email) {
-        sendBtn.className = "btn btn-disabled";
-        sendBtn.title = "No email address";
-        sendBtn.innerHTML = "📧 Send Email";
-    } else if (current.email_sent === 1) {
-        sendBtn.className = "btn btn-sent";
-        sendBtn.title = "Already sent - click to resend";
-        sendBtn.innerHTML = "✓ Resend Email";
-    } else {
-        sendBtn.className = "btn btn-email";
-        sendBtn.title = "";
-        sendBtn.innerHTML = "📧 Send Email";
-    }
+    sendBtn.className = !emailConfigured || !current.email ? "btn btn-disabled" : current.email_sent === 1 ? "btn btn-sent" : "btn btn-email";
+    sendBtn.innerHTML = current.email_sent === 1 ? "✓ Resend" : "📧 Email";
     
-    // Update WhatsApp button
-    if (!current.phone) {
-        sendWABtn.className = "btn btn-disabled";
-        sendWABtn.innerHTML = "💬 WhatsApp";
-    } else if (current.whatsapp_sent === 1) {
-        sendWABtn.className = "btn btn-sent";
-        sendWABtn.innerHTML = "✓ Resend WA";
-    } else {
-        sendWABtn.className = "btn btn-success";
-        sendWABtn.innerHTML = "💬 WhatsApp Direct";
-    }
+    sendWABtn.className = !current.phone && !current.whatsapp ? "btn btn-disabled" : current.whatsapp_sent === 1 ? "btn btn-sent" : "btn btn-success";
+    sendWABtn.innerHTML = current.whatsapp_sent === 1 ? "✓ Resend" : "💬 WhatsApp + 🖼️";
     
     document.getElementById("modal").classList.add("active");
 }
 
-function closeModal() {
-    document.getElementById("modal").classList.remove("active");
-}
+function closeModal() { document.getElementById("modal").classList.remove("active"); }
 
 function showPermissionModal(instructions) {
-    if (instructions && instructions.length > 0) {
-        const list = document.getElementById("permissionInstructions");
-        list.innerHTML = instructions.map(i => `<li>${i}</li>`).join('');
+    if (instructions?.length) {
+        document.getElementById("permissionInstructions").innerHTML = instructions.map(i => `<li>${i}</li>`).join('');
     }
     document.getElementById("permissionModal").classList.add("active");
 }
 
-function closePermissionModal() {
-    document.getElementById("permissionModal").classList.remove("active");
-    pendingWAEntity = null;
-}
+function closePermissionModal() { document.getElementById("permissionModal").classList.remove("active"); pendingWAEntity = null; }
 
 async function confirmPermission() {
     try {
         await fetch(API + "/whatsapp/grant-permission", { method: "POST" });
         waPermissionGranted = true;
-        toast("Permission confirmed! Retrying...", "success");
+        toast("Permission confirmed!", "success");
         closePermissionModal();
-        
-        // Retry the pending WhatsApp send
-        if (pendingWAEntity) {
-            setTimeout(() => quickWA(pendingWAEntity), 500);
-            pendingWAEntity = null;
-        }
-    } catch (e) {
-        toast("Error confirming permission", "error");
-    }
+        if (pendingWAEntity) { setTimeout(() => quickWA(pendingWAEntity), 500); pendingWAEntity = null; }
+    } catch (e) { toast("Error", "error"); }
 }
 
-// Quick WhatsApp from table button - DIRECT SEND
 async function quickWA(id) {
     const entity = entities.find(e => e.id === id);
-    if (!entity || !entity.phone) {
-        toast("No phone number available", "error");
-        return;
-    }
+    if (!entity) return;
     
-    toast("Opening WhatsApp & sending...", "info");
+    const phone = entity.phone || entity.whatsapp;
+    if (!phone) { toast("No phone number", "error"); return; }
+    
+    toast("Sending WhatsApp with image...", "info");
     
     try {
         const r = await fetch(API + "/whatsapp/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                phone: entity.phone,
-                entity_id: entity.id,
-                direct_send: true
-            })
+            body: JSON.stringify({ phone, entity_id: entity.id, direct_send: true, include_image: true })
         });
-        
         const d = await r.json();
         
         if (d.needs_permission) {
-            // Show permission instructions
             pendingWAEntity = id;
             showPermissionModal(d.instructions);
             return;
         }
         
         if (d.success) {
-            toast("✅ WhatsApp message sent to " + entity.name, "success");
-            // Update local entity
+            toast("✅ WhatsApp sent" + (d.image ? " with image!" : "!"), "success");
             entity.whatsapp_sent = 1;
             render();
             refresh();
         } else {
-            toast("Error: " + (d.error || "Unknown error"), "error");
+            toast("Error: " + (d.error || "Unknown"), "error");
         }
-    } catch (e) {
-        toast("Error sending WhatsApp: " + e.message, "error");
-    }
+    } catch (e) { toast("Error: " + e.message, "error"); }
 }
 
-// Send WhatsApp from modal
 async function sendWA() {
-    if (!current || !current.phone) {
-        toast("No phone number", "error");
-        return;
-    }
+    if (!current) return;
+    const phone = current.phone || current.whatsapp;
+    if (!phone) { toast("No phone", "error"); return; }
     
+    const includeImage = document.getElementById("includeWAImage").checked;
     const statusEl = document.getElementById("sendStatus");
     const sendBtn = document.getElementById("sendWABtn");
     
-    statusEl.innerHTML = '<span class="loading"></span> Opening WhatsApp & sending message...';
+    statusEl.innerHTML = '<span class="loading"></span> Sending WhatsApp' + (includeImage ? ' with image...' : '...');
     sendBtn.disabled = true;
     
     try {
         const r = await fetch(API + "/whatsapp/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                phone: current.phone,
-                entity_id: current.id,
-                direct_send: true
-            })
+            body: JSON.stringify({ phone, entity_id: current.id, direct_send: true, include_image: includeImage })
         });
-        
         const d = await r.json();
         
         if (d.needs_permission) {
-            statusEl.innerHTML = '⚠️ Accessibility permission required - see popup';
+            statusEl.innerHTML = '⚠️ Permission required';
             pendingWAEntity = current.id;
             showPermissionModal(d.instructions);
             sendBtn.disabled = false;
@@ -573,39 +547,31 @@ async function sendWA() {
         }
         
         if (d.success) {
-            statusEl.innerHTML = '✅ WhatsApp message sent!';
-            toast("WhatsApp message sent!", "success");
+            statusEl.innerHTML = '✅ WhatsApp sent' + (d.image ? ' with image!' : '!');
             sendBtn.className = "btn btn-sent";
             sendBtn.innerHTML = "✓ Sent";
             current.whatsapp_sent = 1;
             refresh();
         } else {
-            statusEl.innerHTML = '❌ Error: ' + (d.error || "Unknown");
+            statusEl.innerHTML = '❌ ' + (d.error || "Error");
             sendBtn.disabled = false;
         }
     } catch (e) {
-        statusEl.innerHTML = '❌ Error: ' + e.message;
+        statusEl.innerHTML = '❌ ' + e.message;
         sendBtn.disabled = false;
     }
 }
 
 async function sendEmail() {
-    if (!current || !current.email) {
-        toast("No email address", "error");
-        return;
-    }
-    
-    if (!emailConfigured) {
-        toast("Email not configured! Set GMAIL_EMAIL & GMAIL_APP_PASSWORD in .env", "error");
-        return;
-    }
+    if (!current?.email) { toast("No email", "error"); return; }
+    if (!emailConfigured) { toast("Email not configured", "error"); return; }
     
     const statusEl = document.getElementById("sendStatus");
     const sendBtn = document.getElementById("sendEmailBtn");
     const subject = document.getElementById("emailSubject").value;
     const includeAttachments = document.getElementById("includeAttachments").checked;
     
-    statusEl.innerHTML = '<span class="loading"></span> Sending email' + (includeAttachments ? ' with attachments...' : '...');
+    statusEl.innerHTML = '<span class="loading"></span> Sending email...';
     sendBtn.disabled = true;
     
     try {
@@ -614,40 +580,31 @@ async function sendEmail() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 to_email: current.email,
-                subject: subject,
+                subject,
                 recipient_name: current.name,
                 include_attachments: includeAttachments,
                 entity_id: current.id
             })
         });
-        
         const d = await r.json();
         
         if (r.ok && d.success) {
-            let msg = '✅ Email sent to ' + current.email;
-            if (d.attachments && d.attachments.length > 0) {
-                msg += ' with ' + d.attachments.length + ' attachment(s)';
-            }
-            statusEl.innerHTML = msg;
-            
+            statusEl.innerHTML = '✅ Email sent to ' + current.email;
             sendBtn.className = "btn btn-sent";
             sendBtn.innerHTML = "✓ Sent";
-            toast("Email sent successfully!", "success");
             current.email_sent = 1;
             refresh();
         } else {
-            statusEl.innerHTML = '❌ Error: ' + (d.detail || d.error || "Unknown error");
+            statusEl.innerHTML = '❌ ' + (d.detail || d.error || "Error");
             sendBtn.disabled = false;
         }
     } catch (e) {
-        statusEl.innerHTML = '❌ Error: ' + e.message;
+        statusEl.innerHTML = '❌ ' + e.message;
         sendBtn.disabled = false;
     }
 }
 
-function exportCSV() {
-    window.open(API + "/export/csv", "_blank");
-}
+function exportCSV() { window.open(API + "/export/csv", "_blank"); }
 
 function toast(msg, type) {
     const t = document.getElementById("toast");
