@@ -42,10 +42,11 @@ class EmailRequest(BaseModel):
     custom_body: Optional[str] = None
     include_attachments: bool = True
     attachment_files: Optional[List[str]] = None
+    entity_id: Optional[int] = None  # For tracking sent status
 
 
 class BulkEmailRequest(BaseModel):
-    recipients: List[dict]  # List of {"email": "...", "name": "..."}
+    recipients: List[dict]  # List of {"email": "...", "name": "...", "entity_id": ...}
     subject: Optional[str] = "Pickleball Partnership Opportunity - Manh Thang Factory"
     include_attachments: bool = True
 
@@ -102,6 +103,41 @@ async def list_cities():
     return {"cities": search_engine.get_all_cities()}
 
 
+# ============ TRACKING ENDPOINTS ============
+
+@app.post("/entities/{entity_id}/mark-email-sent")
+async def mark_email_sent(entity_id: int):
+    """Mark an entity as having received an email."""
+    entity = db.get_entity_by_id(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    db.mark_email_sent(entity_id)
+    return {"success": True, "entity_id": entity_id, "email_sent": True}
+
+
+@app.post("/entities/{entity_id}/mark-whatsapp-sent")
+async def mark_whatsapp_sent(entity_id: int):
+    """Mark an entity as having received a WhatsApp message."""
+    entity = db.get_entity_by_id(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    db.mark_whatsapp_sent(entity_id)
+    return {"success": True, "entity_id": entity_id, "whatsapp_sent": True}
+
+
+@app.post("/entities/{entity_id}/reset-sent-status")
+async def reset_sent_status(entity_id: int, channel: Optional[str] = None):
+    """Reset sent status for an entity. channel can be 'email', 'whatsapp', or None for both."""
+    entity = db.get_entity_by_id(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    db.reset_sent_status(entity_id, channel)
+    return {"success": True, "entity_id": entity_id, "channel": channel or "all", "reset": True}
+
+
 # ============ EMAIL ENDPOINTS ============
 
 @app.get("/email/status")
@@ -140,6 +176,11 @@ async def send_email(request: EmailRequest):
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error"))
     
+    # Mark entity as email sent if entity_id provided
+    if request.entity_id:
+        db.mark_email_sent(request.entity_id)
+        result["entity_marked"] = True
+    
     return result
 
 
@@ -151,6 +192,12 @@ async def send_bulk_emails(request: BulkEmailRequest):
         subject=request.subject,
         include_attachments=request.include_attachments
     )
+    
+    # Mark entities as sent for successful emails
+    for detail in result.get("details", []):
+        if detail.get("success") and detail.get("entity_id"):
+            db.mark_email_sent(detail["entity_id"])
+    
     return result
 
 
@@ -161,8 +208,7 @@ async def send_email_to_entity(
     include_attachments: bool = True
 ):
     """Send email to a specific entity by ID with attachments."""
-    entities = db.get_all_entities()
-    entity = next((e for e in entities if e.get("id") == entity_id), None)
+    entity = db.get_entity_by_id(entity_id)
     
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -179,6 +225,10 @@ async def send_email_to_entity(
     
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error"))
+    
+    # Mark entity as email sent
+    db.mark_email_sent(entity_id)
+    result["entity_marked"] = True
     
     return result
 
