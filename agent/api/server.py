@@ -9,6 +9,7 @@ from agent.search.discovery import SearchEngine
 from agent.classify.classifier import EntityClassifier
 from agent.proposal.generator import ProposalGenerator
 from agent.email.service import EmailService
+from agent.whatsapp.service import WhatsAppService, set_permission_granted
 
 app = FastAPI(title="Pickleball Agent API", version="1.0.0")
 
@@ -24,6 +25,7 @@ search_engine = SearchEngine()
 classifier = EntityClassifier()
 proposal_gen = ProposalGenerator()
 email_service = EmailService()
+whatsapp_service = WhatsAppService()
 
 
 class DiscoverRequest(BaseModel):
@@ -49,6 +51,13 @@ class BulkEmailRequest(BaseModel):
     recipients: List[dict]  # List of {"email": "...", "name": "...", "entity_id": ...}
     subject: Optional[str] = "Pickleball Partnership Opportunity - Manh Thang Factory"
     include_attachments: bool = True
+
+
+class WhatsAppRequest(BaseModel):
+    phone: str
+    message: Optional[str] = None
+    entity_id: Optional[int] = None  # For tracking sent status
+    direct_send: bool = True  # If True, auto-send; if False, just open chat
 
 
 @app.get("/")
@@ -231,6 +240,95 @@ async def send_email_to_entity(
     result["entity_marked"] = True
     
     return result
+
+
+# ============ WHATSAPP ENDPOINTS ============
+
+@app.get("/whatsapp/status")
+async def whatsapp_status():
+    """Check WhatsApp automation permission status."""
+    return whatsapp_service.check_permission()
+
+
+@app.post("/whatsapp/grant-permission")
+async def grant_whatsapp_permission():
+    """Confirm that user has granted accessibility permission."""
+    set_permission_granted(True)
+    return {"success": True, "message": "Permission status updated. Automation is now enabled."}
+
+
+@app.post("/whatsapp/send")
+async def send_whatsapp(request: WhatsAppRequest):
+    """Send WhatsApp message directly (auto-sends on Mac with accessibility permission)."""
+    if request.direct_send:
+        result = whatsapp_service.send_direct(request.phone, request.message)
+    else:
+        result = whatsapp_service.open_chat(request.phone, request.message)
+    
+    # If permission is needed, return instructions
+    if result.get("needs_permission"):
+        return {
+            "success": False,
+            "needs_permission": True,
+            "error": result.get("error"),
+            "instructions": result.get("instructions"),
+            "action_required": "Grant accessibility permission and call /whatsapp/grant-permission endpoint"
+        }
+    
+    # Mark entity as whatsapp sent if successful and entity_id provided
+    if result.get("success") and request.entity_id:
+        db.mark_whatsapp_sent(request.entity_id)
+        result["entity_marked"] = True
+    
+    return result
+
+
+@app.post("/whatsapp/send-to-entity/{entity_id}")
+async def send_whatsapp_to_entity(
+    entity_id: int,
+    message: Optional[str] = None,
+    direct_send: bool = True
+):
+    """Send WhatsApp message to a specific entity by ID."""
+    entity = db.get_entity_by_id(entity_id)
+    
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    if not entity.get("phone"):
+        raise HTTPException(status_code=400, detail="Entity has no phone number")
+    
+    if direct_send:
+        result = whatsapp_service.send_direct(entity["phone"], message)
+    else:
+        result = whatsapp_service.open_chat(entity["phone"], message)
+    
+    # If permission is needed, return instructions
+    if result.get("needs_permission"):
+        return {
+            "success": False,
+            "needs_permission": True,
+            "error": result.get("error"),
+            "instructions": result.get("instructions"),
+            "entity_phone": entity["phone"],
+            "action_required": "Grant accessibility permission and call /whatsapp/grant-permission endpoint"
+        }
+    
+    # Mark entity as whatsapp sent if successful
+    if result.get("success"):
+        db.mark_whatsapp_sent(entity_id)
+        result["entity_marked"] = True
+    
+    return result
+
+
+@app.get("/whatsapp/url")
+async def get_whatsapp_url(phone: str, message: Optional[str] = None):
+    """Generate WhatsApp URL for manual opening."""
+    return {
+        "url": whatsapp_service.get_url(phone, message),
+        "phone": phone
+    }
 
 
 def create_app():
