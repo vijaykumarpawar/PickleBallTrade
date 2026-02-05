@@ -36,6 +36,15 @@ th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
 .send-status{font-size:12px;color:#666;margin-top:8px}
 .loading{display:inline-block;width:16px;height:16px;border:2px solid #ccc;border-top-color:#667eea;border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.attachment-list{background:#f8f9fa;border-radius:8px;padding:12px;margin-top:12px}
+.attachment-item{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid #eee}
+.attachment-item:last-child{border-bottom:none}
+.attachment-icon{font-size:20px}
+.attachment-name{flex:1;font-size:13px;word-break:break-all}
+.attachment-size{font-size:11px;color:#666;white-space:nowrap}
+.attachment-warning{color:#dc3545;font-size:11px}
+.checkbox-group{display:flex;align-items:center;gap:8px;margin:12px 0}
+.checkbox-group input[type="checkbox"]{width:18px;height:18px}
 </style>
 </head>
 <body>
@@ -54,7 +63,13 @@ Checking email status...
 <div class="form-group"><label>GMAIL_EMAIL</label><input type="text" id="gmailEmail" placeholder="Configured on server" readonly style="background:#f8f9fa"></div>
 <div class="form-group"><label>Status</label><input type="text" id="gmailStatus" placeholder="Checking..." readonly style="background:#f8f9fa"></div>
 </div>
-<button class="btn btn-primary" onclick="checkEmailStatus()">🔄 Check Status</button>
+
+<h3 style="margin-top:20px;margin-bottom:12px">📎 Email Attachments</h3>
+<div id="attachmentsList" class="attachment-list">
+<p style="color:#666;text-align:center">Loading attachments...</p>
+</div>
+
+<button class="btn btn-primary" style="margin-top:16px" onclick="checkEmailStatus()">🔄 Check Status</button>
 </div>
 
 <div class="card"><h2>🔍 Discover Leads</h2>
@@ -92,6 +107,15 @@ Checking email status...
 <div class="form-group"><label>To</label><input id="recipient" readonly style="background:#f8f9fa"></div>
 <div class="form-group"><label>Email</label><input id="recipientEmail" readonly style="background:#f8f9fa"></div>
 <div class="form-group"><label>Subject</label><input id="emailSubject" value="Pickleball Partnership Opportunity - Manh Thang Factory"></div>
+
+<div class="checkbox-group">
+<input type="checkbox" id="includeAttachments" checked>
+<label for="includeAttachments" style="margin:0;font-weight:normal">📎 Include attachments (PDF brochure + Product image)</label>
+</div>
+
+<div id="modalAttachments" class="attachment-list" style="margin-bottom:16px">
+</div>
+
 <div class="form-group">
 <label>Message Preview</label>
 <div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap;max-height:200px;overflow-y:auto;font-size:13px"></div>
@@ -110,6 +134,7 @@ Checking email status...
 <script>
 const API = "http://localhost:8000";
 let entities = [], current = null, emailCount = 0, waCount = 0, emailConfigured = false;
+let availableAttachments = [];
 
 const PROPOSAL_TEMPLATE = `Dear Sir / Madam,
 
@@ -183,6 +208,29 @@ document.addEventListener("DOMContentLoaded", () => {
     checkEmailStatus();
 });
 
+function getFileIcon(filename) {
+    if (filename.toLowerCase().endsWith('.pdf')) return '📄';
+    if (filename.toLowerCase().match(/\.(jpg|jpeg|png|gif)$/)) return '🖼️';
+    return '📎';
+}
+
+function renderAttachments(containerId, attachments) {
+    const container = document.getElementById(containerId);
+    if (!attachments || attachments.length === 0) {
+        container.innerHTML = '<p style="color:#666;text-align:center;font-size:13px">No attachments in uploads folder</p>';
+        return;
+    }
+    
+    container.innerHTML = attachments.map(a => `
+        <div class="attachment-item">
+            <span class="attachment-icon">${getFileIcon(a.name)}</span>
+            <span class="attachment-name">${a.name}</span>
+            <span class="attachment-size">${a.size_mb} MB</span>
+            ${a.too_large ? '<span class="attachment-warning">⚠️ Too large</span>' : '✅'}
+        </div>
+    `).join('');
+}
+
 async function checkEmailStatus() {
     const statusEl = document.getElementById("emailStatus");
     const gmailStatusEl = document.getElementById("gmailStatus");
@@ -192,6 +240,7 @@ async function checkEmailStatus() {
         const r = await fetch(API + "/email/status");
         const d = await r.json();
         emailConfigured = d.configured;
+        availableAttachments = d.attachments || [];
         
         if (d.configured) {
             statusEl.className = "email-status configured";
@@ -204,11 +253,16 @@ async function checkEmailStatus() {
             gmailStatusEl.value = "✗ Not configured";
             gmailEmailEl.value = "Not set";
         }
+        
+        // Render attachments list
+        renderAttachments('attachmentsList', availableAttachments);
+        
     } catch (e) {
         statusEl.className = "email-status not-configured";
         statusEl.innerHTML = "❌ Cannot connect to API";
         gmailStatusEl.value = "Error";
         gmailEmailEl.value = "API not reachable";
+        document.getElementById('attachmentsList').innerHTML = '<p style="color:#dc3545">Cannot load attachments</p>';
     }
 }
 
@@ -301,6 +355,10 @@ function openModal(id) {
     document.getElementById("recipientEmail").value = current.email || "No email available";
     document.getElementById("msgText").textContent = PROPOSAL_TEMPLATE.replace("Dear Sir / Madam", "Dear " + (current.name || "Sir / Madam"));
     document.getElementById("sendStatus").textContent = "";
+    document.getElementById("includeAttachments").checked = true;
+    
+    // Render attachments in modal
+    renderAttachments('modalAttachments', availableAttachments.filter(a => !a.too_large));
     
     const sendBtn = document.getElementById("sendEmailBtn");
     if (!emailConfigured) {
@@ -335,8 +393,9 @@ async function sendEmail() {
     const statusEl = document.getElementById("sendStatus");
     const sendBtn = document.getElementById("sendEmailBtn");
     const subject = document.getElementById("emailSubject").value;
+    const includeAttachments = document.getElementById("includeAttachments").checked;
     
-    statusEl.innerHTML = '<span class="loading"></span> Sending email...';
+    statusEl.innerHTML = '<span class="loading"></span> Sending email' + (includeAttachments ? ' with attachments...' : '...');
     sendBtn.disabled = true;
     
     try {
@@ -346,14 +405,22 @@ async function sendEmail() {
             body: JSON.stringify({
                 to_email: current.email,
                 subject: subject,
-                recipient_name: current.name
+                recipient_name: current.name,
+                include_attachments: includeAttachments
             })
         });
         
         const d = await r.json();
         
         if (r.ok && d.success) {
-            statusEl.innerHTML = '✅ Email sent successfully to ' + current.email;
+            let msg = '✅ Email sent to ' + current.email;
+            if (d.attachments && d.attachments.length > 0) {
+                msg += ' with ' + d.attachments.length + ' attachment(s)';
+            }
+            if (d.skipped_attachments && d.skipped_attachments.length > 0) {
+                msg += '<br><span style="color:#dc3545">⚠️ Skipped: ' + d.skipped_attachments.join(', ') + '</span>';
+            }
+            statusEl.innerHTML = msg;
             emailCount++;
             refresh();
             toast("Email sent successfully!", "success");
