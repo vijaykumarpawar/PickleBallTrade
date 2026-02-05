@@ -3,7 +3,7 @@ import os
 import re
 import asyncio
 from typing import List, Dict, Optional
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 import httpx
 from bs4 import BeautifulSoup
 
@@ -17,15 +17,34 @@ class SearchEngine:
         else:
             self.cities_config = {"tier_1": [], "tier_2": [], "tier_3": []}
         
+        # Prioritize business directories in search queries
         self.search_templates = [
-            "{city} pickleball equipment importer",
-            "{city} pickleball paddle distributor",
-            "{city} pickleball sports goods wholesale",
-            "{city} pickleball equipment dealer",
-            "pickleball equipment supplier {city} India",
-            "{city} sports equipment importer pickleball",
-            "pickleball wholesale distributor {city}",
-            "{city} racket sports equipment dealer",
+            "site:indiamart.com pickleball {city}",
+            "site:tradeindia.com pickleball {city}",
+            "site:justdial.com pickleball {city}",
+            "site:exportersindia.com pickleball",
+            "{city} pickleball equipment manufacturer contact",
+            "{city} pickleball paddle wholesale dealer",
+            "{city} pickleball importer distributor",
+            "pickleball equipment supplier {city} India contact",
+            "{city} sports goods dealer pickleball paddle",
+            "buy pickleball paddles wholesale {city}",
+        ]
+        
+        # Domains to prioritize (business directories)
+        self.priority_domains = [
+            "indiamart.com", "tradeindia.com", "justdial.com",
+            "exportersindia.com", "yellowpages.co.in", "sulekha.com",
+            "tradexcel.in", "go4worldbusiness.com"
+        ]
+        
+        # Domains to skip
+        self.skip_domains = [
+            "youtube.com", "facebook.com", "twitter.com", "x.com",
+            "instagram.com", "linkedin.com", "wikipedia.org",
+            "amazon", "flipkart", "myntra", "snapdeal", "meesho",
+            "news", "thehindu", "indiatimes", "ndtv", "india.com",
+            "bbc.com", "cnn.com", "reuters", "bloomberg"
         ]
         
         self.http_client = None
@@ -50,30 +69,42 @@ class SearchEngine:
         # Email pattern
         email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
         emails = re.findall(email_pattern, text)
-        if emails:
-            contact["email"] = emails[0]
+        # Filter out common non-business emails
+        filtered_emails = [e for e in emails if not any(
+            x in e.lower() for x in ['example', 'test', 'noreply', 'no-reply', 'admin@', 'support@']
+        )]
+        if filtered_emails:
+            contact["email"] = filtered_emails[0]
         
         # Phone patterns for India
         phone_patterns = [
             r"\+91[\s-]?\d{10}",
             r"\+91[\s-]?\d{5}[\s-]?\d{5}",
             r"0\d{2,4}[\s-]?\d{6,8}",
-            r"\d{10}",
+            r"(?<!\d)\d{10}(?!\d)",  # 10 digit number not surrounded by digits
         ]
         for pattern in phone_patterns:
             phones = re.findall(pattern, text)
             if phones:
-                contact["phone"] = phones[0].strip()
-                break
+                phone = phones[0].strip()
+                # Validate it looks like a phone number
+                if len(re.sub(r'\D', '', phone)) >= 10:
+                    contact["phone"] = phone
+                    break
         
         return contact
 
     def _clean_business_name(self, title: str) -> str:
         """Clean up business name from search title."""
+        # Remove common suffixes and website names
         remove_patterns = [
-            r"\s*[-|].*$",
+            r"\s*[-|–].*$",
             r"\s*\|.*$",
-            r"\s*:.*$",
+            r"\s*::.*$",
+            r"\s*-\s*IndiaMART.*$",
+            r"\s*-\s*TradeIndia.*$",
+            r"\s*-\s*JustDial.*$",
+            r"\s*,\s*\w+\s*$",  # Remove trailing city names
             r"\bPvt\.?\s*Ltd\.?\b",
             r"\bPrivate\s*Limited\b",
             r"\bLLP\b",
@@ -83,6 +114,43 @@ class SearchEngine:
         for pattern in remove_patterns:
             name = re.sub(pattern, "", name, flags=re.IGNORECASE)
         return name.strip()[:100]
+
+    def _is_business_url(self, url: str) -> bool:
+        """Check if URL is likely a business listing."""
+        url_lower = url.lower()
+        
+        # Skip non-business domains
+        if any(domain in url_lower for domain in self.skip_domains):
+            return False
+        
+        # Prioritize business directories
+        if any(domain in url_lower for domain in self.priority_domains):
+            return True
+        
+        # Check for business-like patterns
+        business_patterns = [
+            r'/company/', r'/supplier/', r'/manufacturer/',
+            r'/dealer/', r'/distributor/', r'/seller/',
+            r'/shop/', r'/store/', r'/products/'
+        ]
+        if any(re.search(pattern, url_lower) for pattern in business_patterns):
+            return True
+        
+        return True  # Allow other URLs but they'll be lower priority
+
+    def _get_url_priority(self, url: str) -> int:
+        """Get priority score for URL (higher = better)."""
+        url_lower = url.lower()
+        
+        # Highest priority for business directories
+        if any(domain in url_lower for domain in self.priority_domains):
+            return 10
+        
+        # Medium priority for business-like URLs
+        if any(pattern in url_lower for pattern in ['/company/', '/supplier/', '/manufacturer/']):
+            return 5
+        
+        return 1
 
     async def _fetch_page_details(self, url: str) -> Dict:
         """Fetch additional details from a webpage."""
@@ -106,7 +174,7 @@ class SearchEngine:
                 # Try to find address
                 for tag in soup.find_all(["address", "p", "div", "span"]):
                     tag_text = tag.get_text(strip=True)
-                    if any(kw in tag_text.lower() for kw in ["address", "located", "office"]):
+                    if any(kw in tag_text.lower() for kw in ["address", "located", "office", "warehouse"]):
                         if len(tag_text) > 20 and len(tag_text) < 200:
                             details["address"] = tag_text
                             break
@@ -130,67 +198,87 @@ class SearchEngine:
         seen_urls = set()
         seen_names = set()
         
-        with DDGS() as ddgs:
-            for template in self.search_templates:
-                if len(results) >= limit:
-                    break
+        ddgs = DDGS()
+        
+        for template in self.search_templates:
+            if len(results) >= limit:
+                break
+            
+            query = template.format(city=city)
+            try:
+                search_results = list(ddgs.text(query, region="in-en", max_results=10))
                 
-                query = template.format(city=city)
-                try:
-                    search_results = list(ddgs.text(query, region="in-en", max_results=5))
+                # Sort by URL priority
+                search_results.sort(key=lambda x: self._get_url_priority(x.get("href", "")), reverse=True)
+                
+                for item in search_results:
+                    if len(results) >= limit:
+                        break
                     
-                    for item in search_results:
-                        if len(results) >= limit:
-                            break
-                        
-                        url = item.get("href", "")
-                        title = item.get("title", "")
-                        body = item.get("body", "")
-                        
-                        # Skip duplicates
-                        if url in seen_urls:
-                            continue
-                        
-                        # Skip social media and marketplace sites
-                        skip_domains = ["youtube.com", "facebook.com", "twitter.com", 
-                                       "instagram.com", "linkedin.com", "wikipedia.org",
-                                       "amazon", "flipkart", "myntra", "snapdeal"]
-                        if any(domain in url.lower() for domain in skip_domains):
-                            continue
-                        
-                        # Clean business name
-                        name = self._clean_business_name(title)
-                        if not name or len(name) < 3:
-                            continue
-                        
-                        # Skip duplicate names
-                        name_lower = name.lower()
-                        if name_lower in seen_names:
-                            continue
-                        
-                        seen_urls.add(url)
-                        seen_names.add(name_lower)
-                        
-                        # Extract contact info from snippet
-                        contact = self._extract_contact_info(body)
-                        
-                        business = {
-                            "name": name,
-                            "city": city,
-                            "tier": tier,
-                            "website": url,
-                            "description": body[:300] if body else None,
-                            "email": contact.get("email"),
-                            "phone": contact.get("phone"),
-                            "source": "web_search",
-                            "search_query": query
-                        }
-                        
-                        results.append(business)
-                        
-                except Exception as e:
-                    print(f"Search error for query '{query}': {e}")
-                    continue
+                    url = item.get("href", "")
+                    title = item.get("title", "")
+                    body = item.get("body", "")
+                    
+                    # Skip duplicates
+                    if url in seen_urls:
+                        continue
+                    
+                    # Check if it's a valid business URL
+                    if not self._is_business_url(url):
+                        continue
+                    
+                    # Clean business name
+                    name = self._clean_business_name(title)
+                    if not name or len(name) < 3:
+                        continue
+                    
+                    # Skip duplicate names
+                    name_lower = name.lower()
+                    if name_lower in seen_names:
+                        continue
+                    
+                    seen_urls.add(url)
+                    seen_names.add(name_lower)
+                    
+                    # Extract contact info from snippet
+                    contact = self._extract_contact_info(body)
+                    
+                    # Determine business type from content
+                    biz_type = "Unknown"
+                    body_lower = body.lower()
+                    if "manufacturer" in body_lower:
+                        biz_type = "Manufacturer"
+                    elif "distributor" in body_lower:
+                        biz_type = "Distributor"
+                    elif "importer" in body_lower:
+                        biz_type = "Importer"
+                    elif "wholesale" in body_lower or "wholesaler" in body_lower:
+                        biz_type = "Wholesaler"
+                    elif "retailer" in body_lower or "shop" in body_lower:
+                        biz_type = "Retailer"
+                    elif "dealer" in body_lower:
+                        biz_type = "Dealer"
+                    elif "supplier" in body_lower:
+                        biz_type = "Supplier"
+                    
+                    business = {
+                        "name": name,
+                        "city": city,
+                        "tier": tier,
+                        "type": biz_type,
+                        "website": url,
+                        "description": body[:300] if body else None,
+                        "email": contact.get("email"),
+                        "phone": contact.get("phone"),
+                        "source": "web_search",
+                        "search_query": query
+                    }
+                    
+                    results.append(business)
+                    
+            except Exception as e:
+                print(f"Search error for query '{query}': {e}")
+                continue
         
         # Enrich first few results with page scraping
         if results:
