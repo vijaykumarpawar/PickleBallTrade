@@ -11,153 +11,410 @@ body{font-family:system-ui;background:linear-gradient(135deg,#667eea,#764ba2);mi
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-weight:600;margin-bottom:8px}
 .form-group input,.form-group select{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px}
-.btn{padding:12px 24px;border:none;border-radius:8px;font-weight:600;cursor:pointer}
+.btn{padding:12px 24px;border:none;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.2)}
 .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:white}
 .btn-success{background:#25D366;color:white}
+.btn-email{background:linear-gradient(135deg,#4285f4,#34a853);color:white}
+.btn-disabled{background:#ccc;cursor:not-allowed}
+.btn-disabled:hover{transform:none;box-shadow:none}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
 .stat{background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:20px;border-radius:12px;text-align:center}
 table{width:100%;border-collapse:collapse;margin-top:16px}
 th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
-.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center}
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
 .modal.active{display:flex}
-.modal-content{background:white;border-radius:16px;padding:30px;max-width:600px;width:90%}
-.toast{position:fixed;bottom:20px;right:20px;background:#28a745;color:white;padding:16px 24px;border-radius:8px;display:none}
+.modal-content{background:white;border-radius:16px;padding:30px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto}
+.toast{position:fixed;bottom:20px;right:20px;padding:16px 24px;border-radius:8px;display:none;z-index:2000}
 .toast.show{display:block}
+.toast.success{background:#28a745;color:white}
+.toast.error{background:#dc3545;color:white}
+.toast.info{background:#17a2b8;color:white}
+.email-status{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:20px;font-size:14px}
+.email-status.configured{background:#d4edda;color:#155724}
+.email-status.not-configured{background:#f8d7da;color:#721c24}
+.send-status{font-size:12px;color:#666;margin-top:8px}
+.loading{display:inline-block;width:16px;height:16px;border:2px solid #ccc;border-top-color:#667eea;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <div class="container">
-<div class="header"><h1>Pickleball Trade</h1><p>Outreach Dashboard</p></div>
-<div class="card"><h2>Your Contact Details</h2>
+<div class="header">
+<h1>🏓 Pickleball Trade</h1>
+<p>Outreach Dashboard</p>
+<div id="emailStatus" class="email-status not-configured" style="margin-top:12px">
+Checking email status...
+</div>
+</div>
+
+<div class="card"><h2>📧 Email Configuration</h2>
+<p style="margin-bottom:16px;color:#666">Configure Gmail credentials in the <code>.env</code> file on the server:</p>
 <div class="grid">
-<div class="form-group"><label>Email</label><input type="email" id="userEmail" placeholder="your@email.com"></div>
-<div class="form-group"><label>Mobile</label><input type="tel" id="userMobile" placeholder="+91 98765 43210"></div>
+<div class="form-group"><label>GMAIL_EMAIL</label><input type="text" id="gmailEmail" placeholder="Configured on server" readonly style="background:#f8f9fa"></div>
+<div class="form-group"><label>Status</label><input type="text" id="gmailStatus" placeholder="Checking..." readonly style="background:#f8f9fa"></div>
 </div>
-<button class="btn btn-primary" onclick="saveConfig()">Save</button>
+<button class="btn btn-primary" onclick="checkEmailStatus()">🔄 Check Status</button>
 </div>
-<div class="card"><h2>Discover Leads</h2>
+
+<div class="card"><h2>🔍 Discover Leads</h2>
 <div class="grid">
 <div class="form-group"><label>City</label><select id="city"><option value="">Select</option></select></div>
 <div class="form-group"><label>Limit</label><input type="number" id="limit" value="5" style="width:100px"></div>
 </div>
 <button class="btn btn-primary" onclick="discover()">Discover</button>
 </div>
+
 <div class="stats">
 <div class="stat"><h3 id="total">0</h3><p>Total</p></div>
 <div class="stat"><h3 id="high">0</h3><p>Types</p></div>
-<div class="stat"><h3 id="emails">0</h3><p>Emails</p></div>
+<div class="stat"><h3 id="emails">0</h3><p>Emails Sent</p></div>
 <div class="stat"><h3 id="whatsapps">0</h3><p>WhatsApp</p></div>
 </div>
+
 <div class="card">
 <div style="display:flex;justify-content:space-between;margin-bottom:20px">
-<h2>Leads</h2>
+<h2>📋 Leads</h2>
 <div>
 <button class="btn btn-primary" onclick="refresh()">Refresh</button>
-<button class="btn btn-primary" onclick="exportCSV()">Export</button>
+<button class="btn btn-primary" onclick="exportCSV()">Export CSV</button>
 </div>
 </div>
-<table><thead><tr><th>Name</th><th>Type</th><th>City</th><th>Actions</th></tr></thead>
-<tbody id="tbody"><tr><td colspan="4" style="text-align:center">Loading...</td></tr></tbody>
+<table><thead><tr><th>Name</th><th>Type</th><th>Email</th><th>City</th><th>Actions</th></tr></thead>
+<tbody id="tbody"><tr><td colspan="5" style="text-align:center">Loading...</td></tr></tbody>
 </table>
 </div>
 </div>
+
 <div class="modal" id="modal">
 <div class="modal-content">
-<h2>Send Proposal</h2>
-<div class="form-group"><label>To</label><input id="recipient" readonly></div>
-<div class="form-group"><label>Message</label><div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap"></div></div>
-<div style="display:flex;gap:8px">
-<button class="btn btn-primary" onclick="sendEmail()">Send Email</button>
-<button class="btn btn-success" onclick="sendWA()">WhatsApp</button>
+<h2>📤 Send Proposal</h2>
+<div class="form-group"><label>To</label><input id="recipient" readonly style="background:#f8f9fa"></div>
+<div class="form-group"><label>Email</label><input id="recipientEmail" readonly style="background:#f8f9fa"></div>
+<div class="form-group"><label>Subject</label><input id="emailSubject" value="Pickleball Partnership Opportunity - Manh Thang Factory"></div>
+<div class="form-group">
+<label>Message Preview</label>
+<div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap;max-height:200px;overflow-y:auto;font-size:13px"></div>
+</div>
+<div id="sendStatus" class="send-status"></div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-email" id="sendEmailBtn" onclick="sendEmail()">📧 Send Email</button>
+<button class="btn btn-success" onclick="sendWA()">💬 WhatsApp</button>
 <button class="btn" onclick="closeModal()">Close</button>
 </div>
 </div>
 </div>
+
 <div class="toast" id="toast"></div>
+
 <script>
-const API="http://localhost:8000";
-let entities=[],current=null,emailCount=0,waCount=0;
-document.addEventListener("DOMContentLoaded",()=>{
-document.getElementById("userEmail").value=localStorage.getItem("userEmail")||"";
-document.getElementById("userMobile").value=localStorage.getItem("userMobile")||"";
-loadCities();refresh();
+const API = "http://localhost:8000";
+let entities = [], current = null, emailCount = 0, waCount = 0, emailConfigured = false;
+
+const PROPOSAL_TEMPLATE = `Dear Sir / Madam,
+
+Greetings.
+
+We are pleased to introduce Manh Thang Industrial Service Development Company Limited (Vietnam), a specialized manufacturer and OEM producer of tournament-grade pickleball balls, and propose a potential collaboration for bulk supply and distribution in the Indian market.
+
+Manh Thang Pickleball Factory operates with advanced rotational hot molding technology, strict quality management systems, and international compliance standards. The factory currently supplies to domestic and export markets including the USA and Europe.
+
+✅ Product Highlight – E-WIN (ONE WIN) Pickleball Balls
+• Certified compliant with USA Pickleball Association (USAPA) standards
+• Designed for international competition and tournaments
+• Indoor ball weight: ~26 g
+• Outdoor ball weight: ~26.5 g
+• Diameter: 74 mm (±5%)
+• Hardness: 44–46 HD (balanced control & durability)
+• 40 precision-drilled holes
+• Manufactured from high-quality PE virgin plastic with performance additives
+• Stable in hot and cold climates; does not soften during extended play
+• High-visibility green and yellow colors
+
+🏭 Manufacturing Strength
+• 5 automatic rotational casting technology production lines
+• Current capacity: 25,000–30,000 balls per day
+• Expansion plan: up to 50,000 balls per day
+• Factory area: over 7,000 m²
+• 65 skilled staff members
+• Continuous process improvement and strict inspection before packing
+
+📦 Product Portfolio
+• S2 Tournament Pickleball
+• E-WIN (ONE WIN) Tournament Series
+• Vincent Series
+• Multi-color Pickleballs
+• Mini Pickleballs
+• 100% Biodegradable Pickleballs (eco-friendly option)
+
+🤝 Why Partner With Manh Thang
+• Consistent tournament-grade quality
+• Competitive factory-direct pricing
+• OEM / Private label manufacturing available
+• Reliable production capacity & delivery schedules
+• Suitable for clubs, academies, tournaments, retailers, and e-commerce platforms
+
+We are currently appointing India distributors, state partners, and bulk buyers and would welcome discussions on:
+• Distribution / dealership model
+• Bulk purchase pricing
+• OEM branding
+• Sample evaluation
+
+📞 Factory Contact (Vietnam – Head Office)
+Manh Thang Industrial Service Development Company Limited
+Phone: +84 91 253 16 66
+Email: manhthang2666@gmail.com
+Website: www.manhthangpickleballfactory.com
+
+For India coordination, please feel free to connect with:
+Vijay Pawar
+India – Business Development
+Mobile / WhatsApp: +91-7975397211
+Email: vijaykp.kp@gmail.com
+
+Looking forward to your positive response and the opportunity to build a long-term partnership.
+
+Warm regards,
+Vijay Pawar`;
+
+document.addEventListener("DOMContentLoaded", () => {
+    loadCities();
+    refresh();
+    checkEmailStatus();
 });
-function saveConfig(){
-localStorage.setItem("userEmail",document.getElementById("userEmail").value);
-localStorage.setItem("userMobile",document.getElementById("userMobile").value);
-toast("Saved!");
+
+async function checkEmailStatus() {
+    const statusEl = document.getElementById("emailStatus");
+    const gmailStatusEl = document.getElementById("gmailStatus");
+    const gmailEmailEl = document.getElementById("gmailEmail");
+    
+    try {
+        const r = await fetch(API + "/email/status");
+        const d = await r.json();
+        emailConfigured = d.configured;
+        
+        if (d.configured) {
+            statusEl.className = "email-status configured";
+            statusEl.innerHTML = "✅ Email configured: " + d.sender;
+            gmailStatusEl.value = "✓ Configured";
+            gmailEmailEl.value = d.sender;
+        } else {
+            statusEl.className = "email-status not-configured";
+            statusEl.innerHTML = "⚠️ Email not configured - Set GMAIL_EMAIL & GMAIL_APP_PASSWORD in .env";
+            gmailStatusEl.value = "✗ Not configured";
+            gmailEmailEl.value = "Not set";
+        }
+    } catch (e) {
+        statusEl.className = "email-status not-configured";
+        statusEl.innerHTML = "❌ Cannot connect to API";
+        gmailStatusEl.value = "Error";
+        gmailEmailEl.value = "API not reachable";
+    }
 }
-async function loadCities(){
-try{const r=await fetch(API+"/cities");const d=await r.json();
-const s=document.getElementById("city");
-d.cities.forEach(c=>{const o=document.createElement("option");o.value=c.name;o.textContent=c.name;s.appendChild(o);});
-}catch(e){console.error(e);}
+
+async function loadCities() {
+    try {
+        const r = await fetch(API + "/cities");
+        const d = await r.json();
+        const s = document.getElementById("city");
+        d.cities.forEach(c => {
+            const o = document.createElement("option");
+            o.value = c.name;
+            o.textContent = c.name;
+            s.appendChild(o);
+        });
+    } catch (e) {
+        console.error(e);
+    }
 }
-async function discover(){
-const city=document.getElementById("city").value;
-const limit=document.getElementById("limit").value;
-if(!city){toast("Select city");return;}
-try{
-const r=await fetch(API+"/discover",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({city,limit:parseInt(limit)})});
-const d=await r.json();
-toast("Found "+d.discovered+" leads!");
-refresh();
-}catch(e){toast("Error");}
+
+async function discover() {
+    const city = document.getElementById("city").value;
+    const limit = document.getElementById("limit").value;
+    if (!city) {
+        toast("Select a city", "error");
+        return;
+    }
+    try {
+        toast("Discovering leads...", "info");
+        const r = await fetch(API + "/discover", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ city, limit: parseInt(limit) })
+        });
+        const d = await r.json();
+        toast("Found " + d.discovered + " leads!", "success");
+        refresh();
+    } catch (e) {
+        toast("Error discovering leads", "error");
+    }
 }
-async function refresh(){
-try{
-const r=await fetch(API+"/entities");const d=await r.json();
-entities=d.entities||[];
-render();
-const s=await(await fetch(API+"/stats")).json();
-document.getElementById("total").textContent=s.total_entities||0;
-document.getElementById("high").textContent=Object.keys(s.by_type||{}).length;
-}catch(e){document.getElementById("tbody").innerHTML="<tr><td colspan=4>API not running</td></tr>";}
-document.getElementById("emails").textContent=emailCount;
-document.getElementById("whatsapps").textContent=waCount;
+
+async function refresh() {
+    try {
+        const r = await fetch(API + "/entities");
+        const d = await r.json();
+        entities = d.entities || [];
+        render();
+        
+        const s = await (await fetch(API + "/stats")).json();
+        document.getElementById("total").textContent = s.total_entities || 0;
+        document.getElementById("high").textContent = Object.keys(s.by_type || {}).length;
+    } catch (e) {
+        document.getElementById("tbody").innerHTML = '<tr><td colspan="5">API not running</td></tr>';
+    }
+    document.getElementById("emails").textContent = emailCount;
+    document.getElementById("whatsapps").textContent = waCount;
 }
-function render(){
-const t=document.getElementById("tbody");
-if(entities.length===0){t.innerHTML="<tr><td colspan=4 style=text-align:center>No leads</td></tr>";return;}
-t.innerHTML=entities.map(e=>"<tr><td><b>"+e.name+"</b></td><td>"+(e.type||"Unknown")+"</td><td>"+(e.city||"")+"</td><td><button class=btn style=margin:2px onclick=openModal("+e.id+")>Email</button><button class=btn style=background:#25D366;color:white;margin:2px onclick=quickWA("+e.id+")>WA</button></td></tr>").join("");
+
+function render() {
+    const t = document.getElementById("tbody");
+    if (entities.length === 0) {
+        t.innerHTML = '<tr><td colspan="5" style="text-align:center">No leads yet. Discover some!</td></tr>';
+        return;
+    }
+    t.innerHTML = entities.map(e => `
+        <tr>
+            <td><b>${e.name}</b></td>
+            <td>${e.type || "Unknown"}</td>
+            <td>${e.email || '<span style="color:#999">No email</span>'}</td>
+            <td>${e.city || ""}</td>
+            <td>
+                <button class="btn btn-email" style="padding:8px 12px;margin:2px" 
+                    onclick="openModal(${e.id})" ${!e.email ? 'disabled title="No email"' : ''}>
+                    📧
+                </button>
+                <button class="btn btn-success" style="padding:8px 12px;margin:2px" 
+                    onclick="quickWA(${e.id})" ${!e.phone ? 'disabled title="No phone"' : ''}>
+                    💬
+                </button>
+            </td>
+        </tr>
+    `).join("");
 }
-async function openModal(id){
-current=entities.find(e=>e.id===id);
-if(!current)return;
-try{
-const r=await fetch(API+"/generate-proposal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({entity_id:id})});
-const p=await r.json();
-document.getElementById("recipient").value=current.name;
-document.getElementById("msgText").textContent=p.whatsapp_message||p.email_proposal;
-document.getElementById("modal").classList.add("active");
-}catch(e){toast("Error");}
+
+function openModal(id) {
+    current = entities.find(e => e.id === id);
+    if (!current) return;
+    
+    document.getElementById("recipient").value = current.name;
+    document.getElementById("recipientEmail").value = current.email || "No email available";
+    document.getElementById("msgText").textContent = PROPOSAL_TEMPLATE.replace("Dear Sir / Madam", "Dear " + (current.name || "Sir / Madam"));
+    document.getElementById("sendStatus").textContent = "";
+    
+    const sendBtn = document.getElementById("sendEmailBtn");
+    if (!emailConfigured) {
+        sendBtn.className = "btn btn-disabled";
+        sendBtn.title = "Configure email in .env file";
+    } else if (!current.email) {
+        sendBtn.className = "btn btn-disabled";
+        sendBtn.title = "No email address";
+    } else {
+        sendBtn.className = "btn btn-email";
+        sendBtn.title = "";
+    }
+    
+    document.getElementById("modal").classList.add("active");
 }
-function closeModal(){document.getElementById("modal").classList.remove("active");}
-function sendEmail(){
-const subj=encodeURIComponent("Pickleball Partnership");
-const body=encodeURIComponent(document.getElementById("msgText").textContent);
-window.open("mailto:"+(current.email||"")+"?subject="+subj+"&body="+body);
-emailCount++;refresh();toast("Email opened!");
+
+function closeModal() {
+    document.getElementById("modal").classList.remove("active");
 }
-function sendWA(){
-const msg=encodeURIComponent(document.getElementById("msgText").textContent);
-const phone=(current.phone||current.whatsapp||"").replace(/\D/g,"");
-window.open("https://wa.me/"+phone+"?text="+msg);
-waCount++;refresh();toast("WhatsApp opened!");
+
+async function sendEmail() {
+    if (!current || !current.email) {
+        toast("No email address", "error");
+        return;
+    }
+    
+    if (!emailConfigured) {
+        toast("Email not configured! Set GMAIL_EMAIL & GMAIL_APP_PASSWORD in .env", "error");
+        return;
+    }
+    
+    const statusEl = document.getElementById("sendStatus");
+    const sendBtn = document.getElementById("sendEmailBtn");
+    const subject = document.getElementById("emailSubject").value;
+    
+    statusEl.innerHTML = '<span class="loading"></span> Sending email...';
+    sendBtn.disabled = true;
+    
+    try {
+        const r = await fetch(API + "/email/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                to_email: current.email,
+                subject: subject,
+                recipient_name: current.name
+            })
+        });
+        
+        const d = await r.json();
+        
+        if (r.ok && d.success) {
+            statusEl.innerHTML = '✅ Email sent successfully to ' + current.email;
+            emailCount++;
+            refresh();
+            toast("Email sent successfully!", "success");
+        } else {
+            statusEl.innerHTML = '❌ ' + (d.detail || d.error || "Failed to send");
+            toast("Failed: " + (d.detail || d.error), "error");
+        }
+    } catch (e) {
+        statusEl.innerHTML = '❌ Network error';
+        toast("Network error", "error");
+    }
+    
+    sendBtn.disabled = false;
 }
-async function quickWA(id){
-const e=entities.find(x=>x.id===id);if(!e)return;
-try{
-const r=await fetch(API+"/generate-proposal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({entity_id:id})});
-const p=await r.json();
-const msg=encodeURIComponent(p.whatsapp_message);
-const phone=(e.phone||e.whatsapp||"").replace(/\D/g,"");
-window.open("https://wa.me/"+phone+"?text="+msg);
-waCount++;refresh();toast("WhatsApp opened!");
-}catch(err){toast("Error");}
+
+function sendWA() {
+    if (!current) return;
+    
+    const msg = encodeURIComponent(PROPOSAL_TEMPLATE.replace("Dear Sir / Madam", "Dear " + (current.name || "Sir / Madam")));
+    const phone = (current.phone || current.whatsapp || "").replace(/\D/g, "");
+    
+    if (!phone) {
+        toast("No phone number available", "error");
+        return;
+    }
+    
+    window.open("https://wa.me/" + phone + "?text=" + msg);
+    waCount++;
+    refresh();
+    toast("WhatsApp opened!", "success");
 }
-function exportCSV(){window.open(API+"/export/csv");toast("Downloaded!");}
-function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),3000);}
+
+async function quickWA(id) {
+    const e = entities.find(x => x.id === id);
+    if (!e) return;
+    
+    const msg = encodeURIComponent(PROPOSAL_TEMPLATE.replace("Dear Sir / Madam", "Dear " + (e.name || "Sir / Madam")));
+    const phone = (e.phone || e.whatsapp || "").replace(/\D/g, "");
+    
+    if (!phone) {
+        toast("No phone number", "error");
+        return;
+    }
+    
+    window.open("https://wa.me/" + phone + "?text=" + msg);
+    waCount++;
+    refresh();
+    toast("WhatsApp opened!", "success");
+}
+
+function exportCSV() {
+    window.open(API + "/export/csv");
+    toast("Download started!", "success");
+}
+
+function toast(m, type = "success") {
+    const t = document.getElementById("toast");
+    t.textContent = m;
+    t.className = "toast show " + type;
+    setTimeout(() => t.classList.remove("show"), 3000);
+}
 </script>
 </body>
 </html>
