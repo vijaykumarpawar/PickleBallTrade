@@ -31,6 +31,8 @@ whatsapp_service = WhatsAppService()
 class DiscoverRequest(BaseModel):
     city: str
     limit: int = 10
+    strategy: Optional[str] = None  # Optional: specific strategy to use
+    deep_search: bool = False  # Use deep search (slower, more comprehensive)
 
 
 class ProposalRequest(BaseModel):
@@ -58,6 +60,7 @@ class WhatsAppRequest(BaseModel):
     message: Optional[str] = None
     entity_id: Optional[int] = None  # For tracking sent status
     direct_send: bool = True  # If True, auto-send; if False, just open chat
+    include_image: bool = True  # Include product image from uploads folder
 
 
 @app.get("/")
@@ -82,13 +85,101 @@ async def list_entities(city: Optional[str] = Query(None), entity_type: Optional
 
 @app.post("/discover")
 async def discover_entities(request: DiscoverRequest):
-    results = await search_engine.discover_businesses(request.city, request.limit)
+    """
+    Discover businesses using comprehensive multi-source search.
+    
+    Strategies available:
+    - directories: IndiaMART, TradeIndia, JustDial, Sulekha
+    - manufacturers: Brand distributor lists
+    - tradeshows: Expo & fair exhibitor lists
+    - linkedin: LinkedIn company/profile search
+    - google: Advanced Google search queries
+    - yellowpages: Yellow pages & chamber of commerce
+    - marketplaces: Amazon/Flipkart seller lookup
+    - sports_shops: Related sports shops & academies
+    
+    Set deep_search=True for comprehensive search using ALL strategies.
+    """
+    if request.deep_search:
+        results = await search_engine.deep_search(request.city, request.limit)
+    elif request.strategy:
+        results = await search_engine.discover_by_strategy(
+            request.city, request.strategy, request.limit
+        )
+    else:
+        results = await search_engine.discover_businesses(request.city, request.limit)
+    
     stored = 0
     for result in results:
         classified = classifier.classify(result)
         db.store_entity(classified)
         stored += 1
-    return {"city": request.city, "discovered": len(results), "stored": stored}
+    
+    return {
+        "city": request.city,
+        "discovered": len(results),
+        "stored": stored,
+        "strategy": request.strategy or ("deep_search" if request.deep_search else "default"),
+        "sources": list(set(r.get("source", "web_search") for r in results))
+    }
+
+
+@app.get("/discover/strategies")
+async def list_strategies():
+    """List available discovery strategies."""
+    return {
+        "strategies": [
+            {
+                "id": "directories",
+                "name": "Industry Directories",
+                "description": "Search IndiaMART, TradeIndia, JustDial, Sulekha, ExportersIndia",
+                "priority": "High - Best for finding verified business listings"
+            },
+            {
+                "id": "manufacturers",
+                "name": "Manufacturer Distributor Lists",
+                "description": "Find authorized distributors from brand websites",
+                "priority": "High - Authoritative, clean contact data"
+            },
+            {
+                "id": "tradeshows",
+                "name": "Trade Shows & Expos",
+                "description": "Search exhibitor lists from sports trade shows",
+                "priority": "Medium - Active industry players"
+            },
+            {
+                "id": "linkedin",
+                "name": "LinkedIn Search",
+                "description": "Find decision-makers and company profiles",
+                "priority": "Medium - Good for B2B contacts"
+            },
+            {
+                "id": "google",
+                "name": "Google Advanced Search",
+                "description": "Use advanced search operators for targeted results",
+                "priority": "Medium - Finds smaller businesses"
+            },
+            {
+                "id": "yellowpages",
+                "name": "Yellow Pages & Chambers",
+                "description": "Search Yellow Pages, MSME directories, chambers of commerce",
+                "priority": "Medium - Established local businesses"
+            },
+            {
+                "id": "marketplaces",
+                "name": "Marketplace Sellers",
+                "description": "Find Amazon/Flipkart/Decathlon sellers",
+                "priority": "Low - May be retailers, not distributors"
+            },
+            {
+                "id": "sports_shops",
+                "name": "Related Sports Shops",
+                "description": "Tennis/badminton shops, sports academies, clubs",
+                "priority": "Medium - Potential pickleball distributors"
+            }
+        ],
+        "note": "Use deep_search=True in /discover to search ALL strategies at once"
+    }
 
 
 @app.post("/generate-proposal")
@@ -246,8 +337,12 @@ async def send_email_to_entity(
 
 @app.get("/whatsapp/status")
 async def whatsapp_status():
-    """Check WhatsApp automation permission status."""
-    return whatsapp_service.check_permission()
+    """Check WhatsApp automation permission status and available attachments."""
+    perm_status = whatsapp_service.check_permission()
+    perm_status["image_available"] = whatsapp_service.get_image_path() is not None
+    perm_status["pdf_available"] = whatsapp_service.get_pdf_path() is not None
+    perm_status["attachments"] = whatsapp_service.get_available_attachments()
+    return perm_status
 
 
 @app.post("/whatsapp/grant-permission")
@@ -259,9 +354,19 @@ async def grant_whatsapp_permission():
 
 @app.post("/whatsapp/send")
 async def send_whatsapp(request: WhatsAppRequest):
-    """Send WhatsApp message directly (auto-sends on Mac with accessibility permission)."""
+    """
+    Send WhatsApp message with optional image attachment.
+    
+    - direct_send=True: Automatically sends message (requires Mac accessibility permission)
+    - include_image=True: Attaches product image from uploads folder
+    """
     if request.direct_send:
-        result = whatsapp_service.send_direct(request.phone, request.message)
+        if request.include_image:
+            # Send with image
+            result = whatsapp_service.send_with_image(request.phone, request.message)
+        else:
+            # Send text only
+            result = whatsapp_service.send_direct(request.phone, request.message)
     else:
         result = whatsapp_service.open_chat(request.phone, request.message)
     
@@ -287,21 +392,27 @@ async def send_whatsapp(request: WhatsAppRequest):
 async def send_whatsapp_to_entity(
     entity_id: int,
     message: Optional[str] = None,
-    direct_send: bool = True
+    direct_send: bool = True,
+    include_image: bool = True
 ):
-    """Send WhatsApp message to a specific entity by ID."""
+    """Send WhatsApp message with image to a specific entity by ID."""
     entity = db.get_entity_by_id(entity_id)
     
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     
-    if not entity.get("phone"):
+    # Use phone or whatsapp field
+    phone = entity.get("phone") or entity.get("whatsapp")
+    if not phone:
         raise HTTPException(status_code=400, detail="Entity has no phone number")
     
     if direct_send:
-        result = whatsapp_service.send_direct(entity["phone"], message)
+        if include_image:
+            result = whatsapp_service.send_with_image(phone, message)
+        else:
+            result = whatsapp_service.send_direct(phone, message)
     else:
-        result = whatsapp_service.open_chat(entity["phone"], message)
+        result = whatsapp_service.open_chat(phone, message)
     
     # If permission is needed, return instructions
     if result.get("needs_permission"):
@@ -310,7 +421,7 @@ async def send_whatsapp_to_entity(
             "needs_permission": True,
             "error": result.get("error"),
             "instructions": result.get("instructions"),
-            "entity_phone": entity["phone"],
+            "entity_phone": phone,
             "action_required": "Grant accessibility permission and call /whatsapp/grant-permission endpoint"
         }
     
@@ -328,6 +439,16 @@ async def get_whatsapp_url(phone: str, message: Optional[str] = None):
     return {
         "url": whatsapp_service.get_url(phone, message),
         "phone": phone
+    }
+
+
+@app.get("/whatsapp/attachments")
+async def get_whatsapp_attachments():
+    """List available WhatsApp attachments from uploads folder."""
+    return {
+        "attachments": whatsapp_service.get_available_attachments(),
+        "image_path": whatsapp_service.get_image_path(),
+        "pdf_path": whatsapp_service.get_pdf_path()
     }
 
 
