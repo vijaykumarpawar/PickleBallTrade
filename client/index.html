@@ -9,6 +9,7 @@ body{font-family:system-ui;background:linear-gradient(135deg,#667eea,#764ba2);mi
 .card{background:white;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 10px 40px rgba(0,0,0,0.2)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-weight:600;margin-bottom:8px}
 .form-group input,.form-group select{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px}
@@ -18,18 +19,22 @@ body{font-family:system-ui;background:linear-gradient(135deg,#667eea,#764ba2);mi
 .btn-success{background:#25D366;color:white}
 .btn-email{background:linear-gradient(135deg,#4285f4,#34a853);color:white}
 .btn-warning{background:#ffc107;color:#333}
+.btn-orange{background:linear-gradient(135deg,#f39c12,#e74c3c);color:white}
+.btn-cyan{background:linear-gradient(135deg,#17a2b8,#20c997);color:white}
 .btn-disabled{background:#ccc;cursor:not-allowed}
 .btn-disabled:hover{transform:none;box-shadow:none}
 .btn-sent{background:linear-gradient(135deg,#28a745,#20c997);color:white;position:relative}
 .btn-sent::after{content:'✓';position:absolute;top:-5px;right:-5px;background:#fff;color:#28a745;border-radius:50%;width:18px;height:18px;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,0.2)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.btn-sm{padding:8px 16px;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px}
 .stat{background:linear-gradient(135deg,#667eea,#764ba2);color:white;padding:20px;border-radius:12px;text-align:center}
 .stat.success{background:linear-gradient(135deg,#28a745,#20c997)}
+.stat.info{background:linear-gradient(135deg,#17a2b8,#3498db)}
 table{width:100%;border-collapse:collapse;margin-top:16px}
 th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
 .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;z-index:1000}
 .modal.active{display:flex}
-.modal-content{background:white;border-radius:16px;padding:30px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto}
+.modal-content{background:white;border-radius:16px;padding:30px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto}
 .toast{position:fixed;bottom:20px;right:20px;padding:16px 24px;border-radius:8px;display:none;z-index:2000}
 .toast.show{display:block}
 .toast.success{background:#28a745;color:white}
@@ -53,14 +58,22 @@ th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
 .checkbox-group input[type="checkbox"]{width:18px;height:18px}
 .sent-badge{display:inline-flex;align-items:center;gap:4px;background:#d4edda;color:#155724;padding:2px 8px;border-radius:12px;font-size:11px;margin-left:8px}
 .source-badge{display:inline-flex;align-items:center;gap:4px;background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:12px;font-size:10px}
-.action-buttons{display:flex;gap:4px;align-items:center}
+.enriched-badge{background:#fff3cd;color:#856404;padding:2px 8px;border-radius:12px;font-size:10px}
+.action-buttons{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 .permission-modal{background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px;margin:16px 0}
 .permission-modal h4{color:#856404;margin-bottom:12px}
 .permission-modal ol{margin-left:20px;color:#856404}
 .permission-modal li{margin-bottom:8px}
 .strategy-select{font-size:13px;padding:8px}
 .strategy-desc{font-size:11px;color:#666;margin-top:4px}
-.image-preview{max-width:100px;max-height:100px;border-radius:8px;margin:8px 0}
+.curated-card{border:2px solid #ffc107;background:linear-gradient(135deg,#fffbeb,#fff)}
+.curated-card h2{color:#856404}
+.company-list{max-height:300px;overflow-y:auto;background:#f8f9fa;border-radius:8px;padding:12px;margin-top:12px}
+.company-item{display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #eee}
+.company-item:last-child{border-bottom:none}
+.company-name{font-weight:600}
+.company-meta{font-size:12px;color:#666}
+.scrape-form{background:#f8f9fa;padding:16px;border-radius:8px;margin-top:12px}
 </style>
 </head>
 <body>
@@ -73,6 +86,29 @@ Checking email status...
 </div>
 </div>
 
+<!-- CURATED COMPANIES CARD -->
+<div class="card curated-card"><h2>🌟 Curated Pickleball Companies</h2>
+<p style="color:#666;margin-bottom:16px">Known importers, distributors, JOOLA dealers - verified companies with direct website scraping</p>
+<div class="grid">
+<div>
+<button class="btn btn-orange" onclick="discoverCurated()">🌟 Import Curated List</button>
+<button class="btn btn-cyan" style="margin-left:8px" onclick="viewCurated()">👁️ View Companies</button>
+<div id="curatedStatus" class="send-status" style="margin-top:8px"></div>
+</div>
+<div>
+<div class="scrape-form">
+<label style="font-weight:600;margin-bottom:8px;display:block">🔗 Scrape Any Website</label>
+<div style="display:flex;gap:8px">
+<input type="text" id="scrapeUrl" placeholder="https://example.com" style="flex:1;padding:8px;border:2px solid #e0e0e0;border-radius:8px">
+<button class="btn btn-primary btn-sm" onclick="scrapeWebsite()">🕸️ Scrape</button>
+</div>
+<div id="scrapeResult" class="send-status" style="margin-top:8px"></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- DISCOVER LEADS CARD -->
 <div class="card"><h2>🔍 Discover Leads</h2>
 <p style="color:#666;margin-bottom:16px">Find distributors, wholesalers, and dealers across multiple sources</p>
 <div class="grid-3">
@@ -88,6 +124,7 @@ Checking email status...
 <label>Search Strategy</label>
 <select id="strategy" class="strategy-select">
 <option value="">🎯 Auto (Recommended)</option>
+<option value="curated">🌟 Curated Companies (Best)</option>
 <option value="directories">📁 Industry Directories (IndiaMART, TradeIndia, JustDial)</option>
 <option value="manufacturers">🏭 Manufacturer Distributor Lists</option>
 <option value="google">🔍 Google Advanced Search</option>
@@ -102,13 +139,15 @@ Checking email status...
 <input type="checkbox" id="deepSearch">
 <label for="deepSearch" style="margin:0;font-weight:normal">🚀 Deep Search - Use ALL strategies (slower but finds more leads)</label>
 </div>
-<div style="display:flex;gap:8px;margin-top:16px">
+<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
 <button class="btn btn-primary" onclick="discover()">🔍 Discover Leads</button>
 <button class="btn btn-warning" onclick="discoverAll()">🌐 Discover All Cities</button>
+<button class="btn btn-cyan" onclick="enrichAll()">🔗 Enrich All Leads</button>
 </div>
 <div id="discoverStatus" class="send-status" style="margin-top:12px"></div>
 </div>
 
+<!-- EMAIL & WHATSAPP CONFIG -->
 <div class="card"><h2>📧 Email & WhatsApp Configuration</h2>
 <div class="grid">
 <div>
@@ -126,19 +165,23 @@ Checking email status...
 <button class="btn btn-primary" style="margin-top:16px" onclick="checkEmailStatus()">🔄 Refresh Status</button>
 </div>
 
+<!-- STATS -->
 <div class="stats">
 <div class="stat"><h3 id="total">0</h3><p>Total Leads</p></div>
-<div class="stat"><h3 id="high">0</h3><p>Business Types</p></div>
-<div class="stat success"><h3 id="emails">0</h3><p>📧 Emails Sent</p></div>
-<div class="stat success"><h3 id="whatsapps">0</h3><p>💬 WhatsApp Sent</p></div>
+<div class="stat info"><h3 id="withEmail">0</h3><p>With Email</p></div>
+<div class="stat info"><h3 id="withPhone">0</h3><p>With Phone</p></div>
+<div class="stat success"><h3 id="emails">0</h3><p>📧 Sent</p></div>
+<div class="stat success"><h3 id="whatsapps">0</h3><p>💬 Sent</p></div>
 </div>
 
+<!-- LEADS TABLE -->
 <div class="card">
-<div style="display:flex;justify-content:space-between;margin-bottom:20px">
+<div style="display:flex;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
 <h2>📋 Leads</h2>
-<div>
-<button class="btn btn-primary" onclick="refresh()">🔄 Refresh</button>
-<button class="btn btn-primary" onclick="exportCSV()">📥 Export CSV</button>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-primary btn-sm" onclick="refresh()">🔄 Refresh</button>
+<button class="btn btn-cyan btn-sm" onclick="enrichAll()">🔗 Enrich Missing</button>
+<button class="btn btn-primary btn-sm" onclick="exportCSV()">📥 Export CSV</button>
 </div>
 </div>
 <table><thead><tr><th>Business</th><th>Type</th><th>Contact</th><th>Source</th><th>Status</th><th>Actions</th></tr></thead>
@@ -147,7 +190,20 @@ Checking email status...
 </div>
 </div>
 
-<!-- Permission Modal -->
+<!-- CURATED COMPANIES MODAL -->
+<div class="modal" id="curatedModal">
+<div class="modal-content">
+<h2>🌟 Known Pickleball Companies in India</h2>
+<p style="color:#666;margin:12px 0">These are verified importers, distributors, and dealers. Click "Import All" to add them with contact scraping.</p>
+<div id="curatedList" class="company-list">Loading...</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-orange" onclick="discoverCurated();closeCuratedModal()">🌟 Import All with Scraping</button>
+<button class="btn" onclick="closeCuratedModal()">Close</button>
+</div>
+</div>
+</div>
+
+<!-- PERMISSION MODAL -->
 <div class="modal" id="permissionModal">
 <div class="modal-content">
 <h2>🔐 Accessibility Permission Required</h2>
@@ -168,7 +224,7 @@ Checking email status...
 </div>
 </div>
 
-<!-- Send Modal -->
+<!-- SEND MODAL -->
 <div class="modal" id="modal">
 <div class="modal-content">
 <h2>📤 Send Proposal</h2>
@@ -201,9 +257,10 @@ Checking email status...
 <div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap;max-height:150px;overflow-y:auto;font-size:12px"></div>
 </div>
 <div id="sendStatus" class="send-status"></div>
-<div style="display:flex;gap:8px;margin-top:16px">
+<div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
 <button class="btn btn-email" id="sendEmailBtn" onclick="sendEmail()">📧 Send Email</button>
 <button class="btn btn-success" id="sendWABtn" onclick="sendWA()">💬 WhatsApp + Image</button>
+<button class="btn btn-cyan" onclick="enrichCurrent()">🔗 Enrich</button>
 <button class="btn" onclick="closeModal()">Close</button>
 </div>
 </div>
@@ -270,7 +327,7 @@ function renderAttachments(containerId, attachments) {
             <span class="attachment-icon">${getFileIcon(a.name)}</span>
             <span class="attachment-name">${a.name}</span>
             <span class="attachment-size">${a.size_mb} MB</span>
-            ${a.too_large ? '<span class="attachment-warning">⚠️ Too large for email</span>' : '✅'}
+            ${a.too_large ? '<span class="attachment-warning">⚠️ Too large</span>' : '✅'}
         </div>
     `).join('');
 }
@@ -322,6 +379,129 @@ async function loadCities() {
     } catch (e) {}
 }
 
+// ============ CURATED COMPANIES ============
+
+async function viewCurated() {
+    document.getElementById("curatedModal").classList.add("active");
+    document.getElementById("curatedList").innerHTML = '<p style="text-align:center"><span class="loading"></span> Loading...</p>';
+    
+    try {
+        const r = await fetch(API + "/curated");
+        const d = await r.json();
+        
+        document.getElementById("curatedList").innerHTML = d.companies.map(c => `
+            <div class="company-item">
+                <div>
+                    <div class="company-name">${c.name}</div>
+                    <div class="company-meta">${c.role} • ${c.city}</div>
+                </div>
+                <a href="${c.website}" target="_blank" style="color:#667eea;font-size:12px">🔗 Visit</a>
+            </div>
+        `).join('');
+    } catch (e) {
+        document.getElementById("curatedList").innerHTML = '<p style="color:#dc3545">Error loading companies</p>';
+    }
+}
+
+function closeCuratedModal() { document.getElementById("curatedModal").classList.remove("active"); }
+
+async function discoverCurated() {
+    const statusEl = document.getElementById("curatedStatus");
+    statusEl.innerHTML = '<span class="loading"></span> Importing curated companies with website scraping...';
+    
+    try {
+        const r = await fetch(API + "/discover/curated", { method: "POST" });
+        const d = await r.json();
+        
+        statusEl.innerHTML = `✅ Imported ${d.discovered} companies, ${d.with_contacts} have contact info`;
+        toast(`Imported ${d.discovered} curated companies!`, "success");
+        refresh();
+    } catch (e) {
+        statusEl.innerHTML = '❌ Error importing companies';
+        toast("Error importing companies", "error");
+    }
+}
+
+async function scrapeWebsite() {
+    const url = document.getElementById("scrapeUrl").value.trim();
+    if (!url) { toast("Enter a URL", "error"); return; }
+    
+    const statusEl = document.getElementById("scrapeResult");
+    statusEl.innerHTML = '<span class="loading"></span> Scraping website...';
+    
+    try {
+        const r = await fetch(API + "/scrape", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url, follow_contact_pages: true })
+        });
+        const d = await r.json();
+        
+        if (d.email || d.phone) {
+            statusEl.innerHTML = `✅ Found: ${d.email || 'No email'} | ${d.phone || 'No phone'}`;
+            toast("Contact info found!", "success");
+        } else {
+            statusEl.innerHTML = '⚠️ No contact info found on this website';
+            toast("No contact info found", "warning");
+        }
+    } catch (e) {
+        statusEl.innerHTML = '❌ Error scraping website';
+        toast("Scrape error", "error");
+    }
+}
+
+// ============ ENRICHMENT ============
+
+async function enrichAll() {
+    const statusEl = document.getElementById("discoverStatus");
+    statusEl.innerHTML = '<span class="loading"></span> Enriching leads by scraping their websites...';
+    
+    try {
+        const r = await fetch(API + "/enrich", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ limit: 50 })
+        });
+        const d = await r.json();
+        
+        statusEl.innerHTML = `✅ Enriched ${d.enriched}/${d.processed} leads with contact info`;
+        toast(`Enriched ${d.enriched} leads!`, "success");
+        refresh();
+    } catch (e) {
+        statusEl.innerHTML = '❌ Error enriching leads';
+        toast("Enrichment error", "error");
+    }
+}
+
+async function enrichCurrent() {
+    if (!current) return;
+    
+    const statusEl = document.getElementById("sendStatus");
+    statusEl.innerHTML = '<span class="loading"></span> Scraping website for contact info...';
+    
+    try {
+        const r = await fetch(API + `/enrich/${current.id}`, { method: "POST" });
+        const d = await r.json();
+        
+        statusEl.innerHTML = `✅ Found: ${d.email || 'No email'} | ${d.phone || 'No phone'}`;
+        
+        // Update current entity
+        if (d.email) current.email = d.email;
+        if (d.phone) current.phone = d.phone;
+        
+        document.getElementById("recipientEmail").value = d.email || "No email";
+        document.getElementById("recipientPhone").value = d.phone || "No phone";
+        
+        toast("Lead enriched!", "success");
+        refresh();
+    } catch (e) {
+        statusEl.innerHTML = '❌ Error enriching lead';
+        toast("Enrichment error", "error");
+    }
+}
+
+// ============ DISCOVER ============
+
 async function discover() {
     const city = document.getElementById("city").value;
     const limit = document.getElementById("limit").value;
@@ -337,12 +517,7 @@ async function discover() {
         const r = await fetch(API + "/discover", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                city, 
-                limit: parseInt(limit),
-                strategy: strategy || null,
-                deep_search: deepSearch
-            })
+            body: JSON.stringify({ city, limit: parseInt(limit), strategy: strategy || null, deep_search: deepSearch })
         });
         const d = await r.json();
         statusEl.innerHTML = `✅ Found ${d.discovered} leads from: ${d.sources?.join(', ') || 'web_search'}`;
@@ -380,6 +555,8 @@ async function discoverAll() {
     refresh();
 }
 
+// ============ REFRESH & RENDER ============
+
 async function refresh() {
     try {
         const r = await fetch(API + "/entities");
@@ -389,7 +566,8 @@ async function refresh() {
         
         const s = await (await fetch(API + "/stats")).json();
         document.getElementById("total").textContent = s.total_entities || 0;
-        document.getElementById("high").textContent = Object.keys(s.by_type || {}).length;
+        document.getElementById("withEmail").textContent = s.with_email || 0;
+        document.getElementById("withPhone").textContent = s.with_phone || 0;
         document.getElementById("emails").textContent = s.emails_sent || 0;
         document.getElementById("whatsapps").textContent = s.whatsapp_sent || 0;
     } catch (e) {
@@ -434,6 +612,8 @@ function render() {
         </tr>
     `}).join("");
 }
+
+// ============ MODALS & ACTIONS ============
 
 function openModal(id) {
     current = entities.find(e => e.id === id);
