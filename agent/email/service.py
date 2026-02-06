@@ -17,6 +17,9 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent.parent.parent
 UPLOADS_DIR = BASE_DIR / "uploads"
 
+# Google Drive Link for catalog/brochure
+CATALOG_LINK = "https://drive.google.com/file/d/1h8w2aM2SvxvX7R40M51rAZznkljrmwHl/view?usp=sharing"
+
 
 class EmailService:
     """Gmail SMTP email service for sending proposals with attachments."""
@@ -34,8 +37,8 @@ class EmailService:
         self.sender_password = os.getenv("GMAIL_APP_PASSWORD", "")
         self.uploads_dir = UPLOADS_DIR
         
-        # Default proposal template
-        self.default_template = """Dear Sir / Madam,
+        # Default proposal template with Google Drive link
+        self.default_template = f"""Dear Sir / Madam,
 
 Greetings.
 
@@ -43,46 +46,48 @@ We are pleased to introduce Manh Thang Industrial Service Development Company Li
 
 Manh Thang Pickleball Factory operates with advanced rotational hot molding technology, strict quality management systems, and international compliance standards. The factory currently supplies to domestic and export markets including the USA and Europe.
 
+📎 Product Catalog & Factory Details: {CATALOG_LINK}
+
 ✅ Product Highlight – E-WIN (ONE WIN) Pickleball Balls
-• Certified compliant with USA Pickleball Association (USAPA) standards
-• Designed for international competition and tournaments
-• Indoor ball weight: ~26 g
-• Outdoor ball weight: ~26.5 g
-• Diameter: 74 mm (±5%)
-• Hardness: 44–46 HD (balanced control & durability)
-• 40 precision-drilled holes
-• Manufactured from high-quality PE virgin plastic with performance additives
-• Stable in hot and cold climates; does not soften during extended play
-• High-visibility green and yellow colors
+* Certified compliant with USA Pickleball Association (USAPA) standards
+* Designed for international competition and tournaments
+* Indoor ball weight: ~26 g
+* Outdoor ball weight: ~26.5 g
+* Diameter: 74 mm (±5%)
+* Hardness: 44–46 HD (balanced control & durability)
+* 40 precision-drilled holes
+* Manufactured from high-quality PE virgin plastic with performance additives
+* Stable in hot and cold climates; does not soften during extended play
+* High-visibility green and yellow colors
 
 🏭 Manufacturing Strength
-• 5 automatic rotational casting technology production lines
-• Current capacity: 25,000–30,000 balls per day
-• Expansion plan: up to 50,000 balls per day
-• Factory area: over 7,000 m²
-• 65 skilled staff members
-• Continuous process improvement and strict inspection before packing
+* 5 automatic rotational casting technology production lines
+* Current capacity: 25,000–30,000 balls per day
+* Expansion plan: up to 50,000 balls per day
+* Factory area: over 7,000 m²
+* 65 skilled staff members
+* Continuous process improvement and strict inspection before packing
 
 📦 Product Portfolio
-• S2 Tournament Pickleball
-• E-WIN (ONE WIN) Tournament Series
-• Vincent Series
-• Multi-color Pickleballs
-• Mini Pickleballs
-• 100% Biodegradable Pickleballs (eco-friendly option)
+* S2 Tournament Pickleball
+* E-WIN (ONE WIN) Tournament Series
+* Vincent Series
+* Multi-color Pickleballs
+* Mini Pickleballs
+* 100% Biodegradable Pickleballs (eco-friendly option)
 
 🤝 Why Partner With Manh Thang
-• Consistent tournament-grade quality
-• Competitive factory-direct pricing
-• OEM / Private label manufacturing available
-• Reliable production capacity & delivery schedules
-• Suitable for clubs, academies, tournaments, retailers, and e-commerce platforms
+* Consistent tournament-grade quality
+* Competitive factory-direct pricing
+* OEM / Private label manufacturing available
+* Reliable production capacity & delivery schedules
+* Suitable for clubs, academies, tournaments, retailers, and e-commerce platforms
 
 We are currently appointing India distributors, state partners, and bulk buyers and would welcome discussions on:
-• Distribution / dealership model
-• Bulk purchase pricing
-• OEM branding
-• Sample evaluation
+* Distribution / dealership model
+* Bulk purchase pricing
+* OEM branding
+* Sample evaluation
 
 📞 Factory Contact (Vietnam – Head Office)
 Manh Thang Industrial Service Development Company Limited
@@ -220,8 +225,13 @@ Vijay Pawar"""
             text_part = MIMEText(email_body, "plain", "utf-8")
             alt_part.attach(text_part)
             
-            # HTML version (convert newlines to <br>)
+            # HTML version (convert newlines to <br> and make links clickable)
             html_body = email_body.replace("\n", "<br>")
+            # Make the Google Drive link clickable
+            html_body = html_body.replace(
+                CATALOG_LINK,
+                f'<a href="{CATALOG_LINK}" style="color: #1a73e8; text-decoration: underline;">View Product Catalog & Factory Details</a>'
+            )
             html_content = f"""
             <html>
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -268,7 +278,8 @@ Vijay Pawar"""
                 "message": f"Email sent successfully to {to_email}",
                 "to": to_email,
                 "subject": subject,
-                "attachments": attached_files
+                "attachments": attached_files,
+                "catalog_link": CATALOG_LINK
             }
             
             if skipped_files:
