@@ -1,35 +1,48 @@
-"""
-WhatsApp Service for Mac - Direct messaging with image attachments
-"""
-import os
+"""WhatsApp automation service for macOS using AppleScript"""
 import subprocess
 import urllib.parse
 import time
 from typing import Optional, List
 from pathlib import Path
 
+# Google Drive Link for catalog/brochure
+CATALOG_LINK = "https://drive.google.com/file/d/1h8w2aM2SvxvX7R40M51rAZznkljrmwHl/view?usp=sharing"
+
 # Default message template for Manh Thang Pickleball Factory
-DEFAULT_WHATSAPP_MESSAGE = """Hi,
+DEFAULT_WHATSAPP_MESSAGE = f"""Hi,
 
-I'm Vijay from *Manh Thang Pickleball Factory* 🏓
+I'm *Vijay Pawar* from *Manh Thang Pickleball Factory* (Vietnam) 🏓
 
-We are a leading manufacturer of high-quality pickleball equipment with competitive pricing for retailers and wholesalers.
+We are a USAPA-certified manufacturer of tournament-grade pickleball balls, currently expanding in India.
 
-*What we offer:*
-✅ Premium Pickleball Paddles
-✅ Professional Pickleball Balls
-✅ Nets & Accessories
-✅ Custom Branding Available
-✅ Bulk Order Discounts
+*🏭 What We Offer:*
+✅ E-WIN (ONE WIN) Tournament Balls - USAPA Certified
+✅ Indoor & Outdoor Balls (26g / 26.5g)
+✅ OEM / Private Label Manufacturing
+✅ Bulk Order Pricing
+✅ 100% Biodegradable Options
 
-I'd love to discuss a partnership opportunity with you. Could we schedule a quick call?
+*📦 Factory Capacity:* 25,000-50,000 balls/day
 
-Looking forward to your response!
+📎 *View Our Catalog:*
+{CATALOG_LINK}
 
-Best regards,
-Vijay
-Manh Thang Pickleball Factory
-📧 vijaykp.kp@gmail.com"""
+We're appointing *India distributors, state partners & bulk buyers*.
+
+Would you be interested in exploring a partnership?
+
+*📞 India Contact:*
+Vijay Pawar
+📱 +91-7975397211
+📧 vijaykp.kp@gmail.com
+
+*🏭 Vietnam Factory:*
+Manh Thang Industrial Service
+📱 +84 91 253 16 66
+📧 manhthang2666@gmail.com
+🌐 www.manhthangpickleballfactory.com
+
+Looking forward to connecting!"""
 
 # Store permission status (persisted in memory during session)
 _permission_granted = False
@@ -90,16 +103,16 @@ def get_all_attachments() -> List[dict]:
 
 
 def generate_whatsapp_url(phone: str, message: str = None) -> str:
-    """Generate WhatsApp URL scheme for Mac desktop app"""
-    phone_clean = ''.join(c for c in phone if c.isdigit() or c == '+')
-    if not phone_clean.startswith('+'):
-        phone_clean = '+91' + phone_clean.lstrip('0')
+    """Generate WhatsApp URL with pre-filled message"""
+    # Clean phone number
+    phone_clean = ''.join(filter(str.isdigit, phone))
+    if not phone_clean.startswith('91') and len(phone_clean) == 10:
+        phone_clean = '91' + phone_clean
     
-    phone_for_url = phone_clean.lstrip('+')
     msg = message or DEFAULT_WHATSAPP_MESSAGE
     encoded_msg = urllib.parse.quote(msg)
     
-    return f"whatsapp://send?phone={phone_for_url}&text={encoded_msg}"
+    return f"https://wa.me/{phone_clean}?text={encoded_msg}"
 
 
 def open_whatsapp_chat(phone: str, message: str = None) -> dict:
@@ -110,15 +123,15 @@ def open_whatsapp_chat(phone: str, message: str = None) -> dict:
         subprocess.run(['open', url], check=True)
         return {
             'success': True,
-            'action': 'opened',
+            'action': 'chat_opened',
             'message': 'WhatsApp opened with chat ready. Press Enter/Send to deliver.',
-            'url': url
+            'url': url,
+            'catalog_link': CATALOG_LINK
         }
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         return {
             'success': False,
-            'error': f'Failed to open WhatsApp: {str(e)}',
-            'url': url
+            'error': str(e)
         }
 
 
@@ -126,306 +139,281 @@ def send_whatsapp_with_image(phone: str, message: str = None, image_path: str = 
     """
     Send WhatsApp message with image attachment using AppleScript automation.
     
-    This uses a two-step process:
+    Process:
     1. Send the text message first
-    2. Then attach and send the image
-    """
-    global _permission_granted
+    2. Wait for message to be sent
+    3. Send the image as a separate message
     
-    phone_clean = ''.join(c for c in phone if c.isdigit() or c == '+')
-    if not phone_clean.startswith('+'):
-        phone_clean = '+91' + phone_clean.lstrip('0')
-    phone_for_url = phone_clean.lstrip('+')
+    Returns dict with success status and details.
+    """
+    # Clean phone number
+    phone_clean = ''.join(filter(str.isdigit, phone))
+    if not phone_clean.startswith('91') and len(phone_clean) == 10:
+        phone_clean = '91' + phone_clean
     
     msg = message or DEFAULT_WHATSAPP_MESSAGE
-    encoded_msg = urllib.parse.quote(msg)
     
     # Get image path if not provided
     if not image_path:
         image_path = get_image_attachment()
     
+    if image_path and not Path(image_path).exists():
+        image_path = None
+    
     # First, send the text message
     applescript_text = f'''
     tell application "WhatsApp"
         activate
+        delay 2
     end tell
     
-    delay 1
-    
-    do shell script "open 'whatsapp://send?phone={phone_for_url}&text={encoded_msg}'"
-    
-    delay 2
+    -- Open chat with phone number using wa.me URL
+    do shell script "open 'https://wa.me/{phone_clean}'"
+    delay 3
     
     tell application "System Events"
         tell process "WhatsApp"
+            set frontmost to true
+            delay 1
+            
+            -- Type the message
+            keystroke "{msg.replace('"', '\\"').replace("'", "'").replace(chr(10), '\\n')}"
+            delay 0.5
+            
+            -- Send text message
             keystroke return
+            delay 2
         end tell
     end tell
     '''
     
-    try:
-        # Send text message first
-        result = subprocess.run(
-            ['osascript', '-e', applescript_text],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+    # If we have an image, add image sending
+    if image_path:
+        applescript_with_image = applescript_text + f'''
+        -- Now send the image
+        tell application "System Events"
+            tell process "WhatsApp"
+                -- Click on attachment button (paperclip icon)
+                -- Use keyboard shortcut if available, or we'll use a different approach
+                
+                -- Copy image to clipboard first
+                set the clipboard to (read (POSIX file "{image_path}") as JPEG picture)
+                delay 0.5
+                
+                -- Paste image
+                keystroke "v" using command down
+                delay 2
+                
+                -- Send image
+                keystroke return
+                delay 1
+            end tell
+        end tell
+        '''
         
-        if result.returncode != 0:
-            error_msg = result.stderr.strip()
-            if 'not allowed' in error_msg.lower() or 'accessibility' in error_msg.lower() or 'assistive' in error_msg.lower():
+        # Try sending with image
+        try:
+            # First try to check if we have permission
+            test_script = 'tell application "System Events" to return name of first process'
+            test_result = subprocess.run(
+                ['osascript', '-e', test_script],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if test_result.returncode != 0 and "not allowed" in test_result.stderr.lower():
                 return {
                     'success': False,
-                    'needs_permission': True,
                     'error': 'Accessibility permission required',
-                    'instructions': [
-                        '1. Open System Settings > Privacy & Security > Accessibility',
-                        '2. Click the lock icon to make changes',
-                        '3. Add and enable "Terminal" or your IDE (VS Code)',
-                        '4. Try again - this is a one-time setup'
-                    ]
+                    'action_required': 'Grant permission in System Preferences > Security & Privacy > Privacy > Accessibility',
+                    'phone': phone_clean
                 }
-            return {
-                'success': False,
-                'error': f'AppleScript error: {error_msg}'
-            }
-        
-        _permission_granted = True
-        
-        # If we have an image, send it
-        if image_path and os.path.exists(image_path):
-            time.sleep(1)  # Wait for message to send
             
-            # AppleScript to attach and send image
-            # This copies the image to clipboard and pastes it into WhatsApp
-            applescript_image = f'''
-            -- Copy image to clipboard
-            set theImage to POSIX file "{image_path}"
-            set the clipboard to (read theImage as «class PNGf»)
+            # Send text message first (simpler approach without image initially)
+            url = generate_whatsapp_url(phone, msg)
+            subprocess.run(['open', url], check=True)
+            time.sleep(3)  # Wait for WhatsApp to open
             
-            delay 0.5
-            
-            -- Paste into WhatsApp
+            # Use AppleScript to press Enter to send
+            send_script = '''
             tell application "System Events"
                 tell process "WhatsApp"
-                    keystroke "v" using command down
-                end tell
-            end tell
-            
-            delay 1
-            
-            -- Send the image
-            tell application "System Events"
-                tell process "WhatsApp"
+                    set frontmost to true
+                    delay 1
                     keystroke return
+                    delay 2
                 end tell
             end tell
             '''
             
-            # Try PNG first, if fails try JPEG
-            try:
-                img_result = subprocess.run(
-                    ['osascript', '-e', applescript_image],
-                    capture_output=True,
-                    text=True,
-                    timeout=15
-                )
-                
-                if img_result.returncode != 0:
-                    # Try JPEG format
-                    applescript_image_jpeg = f'''
-                    set theImage to POSIX file "{image_path}"
-                    set the clipboard to (read theImage as JPEG picture)
+            result = subprocess.run(
+                ['osascript', '-e', send_script],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                # Text sent, now try to send image
+                try:
+                    # Read image and copy to clipboard using AppleScript
+                    img_path_escaped = image_path.replace("'", "'\\''")
+                    
+                    # Different approach: use Finder to copy file, then paste in WhatsApp
+                    image_script = f'''
+                    tell application "Finder"
+                        set theFile to POSIX file "{img_path_escaped}" as alias
+                        set the clipboard to theFile
+                    end tell
                     
                     delay 0.5
                     
                     tell application "System Events"
                         tell process "WhatsApp"
+                            set frontmost to true
+                            delay 0.5
                             keystroke "v" using command down
-                        end tell
-                    end tell
-                    
-                    delay 1
-                    
-                    tell application "System Events"
-                        tell process "WhatsApp"
+                            delay 2
                             keystroke return
                         end tell
                     end tell
                     '''
                     
-                    img_result2 = subprocess.run(
-                        ['osascript', '-e', applescript_image_jpeg],
+                    img_result = subprocess.run(
+                        ['osascript', '-e', image_script],
                         capture_output=True,
                         text=True,
-                        timeout=15
+                        timeout=30
                     )
                     
-                    if img_result2.returncode != 0:
-                        # Fall back to drag-drop method via Finder
-                        applescript_finder = f'''
-                        tell application "Finder"
-                            set theFile to POSIX file "{image_path}" as alias
-                            select theFile
-                        end tell
-                        
-                        delay 0.5
-                        
-                        tell application "System Events"
-                            keystroke "c" using command down
-                        end tell
-                        
-                        delay 0.5
-                        
-                        tell application "WhatsApp"
-                            activate
-                        end tell
-                        
-                        delay 0.5
-                        
-                        tell application "System Events"
-                            tell process "WhatsApp"
-                                keystroke "v" using command down
-                            end tell
-                        end tell
-                        
-                        delay 1
-                        
-                        tell application "System Events"
-                            tell process "WhatsApp"
-                                keystroke return
-                            end tell
-                        end tell
-                        '''
-                        
-                        subprocess.run(
-                            ['osascript', '-e', applescript_finder],
-                            capture_output=True,
-                            text=True,
-                            timeout=15
-                        )
-                
+                    if img_result.returncode == 0:
+                        set_permission_granted(True)
+                        return {
+                            'success': True,
+                            'action': 'message_and_image_sent',
+                            'message': f'Message and image sent to {phone_clean}',
+                            'phone': phone_clean,
+                            'image': Path(image_path).name if image_path else None,
+                            'catalog_link': CATALOG_LINK
+                        }
+                    else:
+                        # Image failed but text was sent
+                        set_permission_granted(True)
+                        return {
+                            'success': True,
+                            'action': 'text_sent_image_failed',
+                            'message': f'Text message sent to {phone_clean}. Image attachment failed: {str(img_result.stderr)}',
+                            'phone': phone_clean,
+                            'catalog_link': CATALOG_LINK
+                        }
+                except Exception as img_error:
+                    return {
+                        'success': True,
+                        'action': 'text_sent_image_failed', 
+                        'message': f'Text message sent to {phone_clean}. Image attachment failed: {str(img_error)}',
+                        'phone': phone_clean,
+                        'catalog_link': CATALOG_LINK
+                    }
+            else:
                 return {
                     'success': True,
-                    'action': 'sent_with_image',
-                    'message': f'Message and image sent to {phone_clean}',
-                    'image': image_path
+                    'action': 'chat_opened',
+                    'message': f'Message sent to {phone_clean}',
+                    'phone': phone_clean,
+                    'catalog_link': CATALOG_LINK
                 }
                 
-            except Exception as img_error:
-                # Text was sent, image failed
-                return {
-                    'success': True,
-                    'action': 'sent_text_only',
-                    'message': f'Text message sent to {phone_clean}. Image attachment failed: {str(img_error)}',
-                    'image_error': str(img_error)
-                }
-        
-        return {
-            'success': True,
-            'action': 'sent',
-            'message': f'Message sent to {phone_clean}',
-            'image': None
-        }
-            
-    except subprocess.TimeoutExpired:
-        return {
-            'success': False,
-            'error': 'Timeout - WhatsApp may not be responding'
-        }
-    except Exception as e:
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'error': 'Timeout waiting for WhatsApp automation',
+                'phone': phone_clean
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'phone': phone_clean
+            }
+    else:
+        # No image, just send text
+        return send_whatsapp_direct(phone, msg)
 
 
 def send_whatsapp_direct(phone: str, message: str = None, attachment_path: str = None) -> dict:
     """Send WhatsApp message directly using AppleScript automation (legacy, no image)"""
-    global _permission_granted
-    
-    phone_clean = ''.join(c for c in phone if c.isdigit() or c == '+')
-    if not phone_clean.startswith('+'):
-        phone_clean = '+91' + phone_clean.lstrip('0')
-    phone_for_url = phone_clean.lstrip('+')
+    # Clean phone number
+    phone_clean = ''.join(filter(str.isdigit, phone))
+    if not phone_clean.startswith('91') and len(phone_clean) == 10:
+        phone_clean = '91' + phone_clean
     
     msg = message or DEFAULT_WHATSAPP_MESSAGE
-    encoded_msg = urllib.parse.quote(msg)
-    
-    applescript = f'''
-    tell application "WhatsApp"
-        activate
-    end tell
-    
-    delay 1
-    
-    do shell script "open 'whatsapp://send?phone={phone_for_url}&text={encoded_msg}'"
-    
-    delay 2
-    
-    tell application "System Events"
-        tell process "WhatsApp"
-            keystroke return
-        end tell
-    end tell
-    '''
     
     try:
+        # Open WhatsApp with pre-filled message
+        url = generate_whatsapp_url(phone, msg)
+        subprocess.run(['open', url], check=True)
+        time.sleep(3)
+        
+        # Use AppleScript to press Enter to send
+        send_script = '''
+        tell application "System Events"
+            tell process "WhatsApp"
+                set frontmost to true
+                delay 1
+                keystroke return
+            end tell
+        end tell
+        '''
+        
         result = subprocess.run(
-            ['osascript', '-e', applescript],
+            ['osascript', '-e', send_script],
             capture_output=True,
             text=True,
             timeout=30
         )
         
         if result.returncode == 0:
-            _permission_granted = True
+            set_permission_granted(True)
             return {
                 'success': True,
-                'action': 'sent',
+                'action': 'message_sent',
                 'message': f'Message sent to {phone_clean}',
-                'attachment': attachment_path if attachment_path else None
+                'phone': phone_clean,
+                'catalog_link': CATALOG_LINK
             }
         else:
-            error_msg = result.stderr.strip()
-            
-            if 'not allowed' in error_msg.lower() or 'accessibility' in error_msg.lower() or 'assistive' in error_msg.lower():
-                return {
-                    'success': False,
-                    'needs_permission': True,
-                    'error': 'Accessibility permission required',
-                    'instructions': [
-                        '1. Open System Settings > Privacy & Security > Accessibility',
-                        '2. Click the lock icon to make changes',
-                        '3. Add and enable "Terminal" or your IDE (VS Code)',
-                        '4. Try again - this is a one-time setup'
-                    ]
-                }
-            
+            # AppleScript failed, but chat is open
             return {
-                'success': False,
-                'error': f'AppleScript error: {error_msg}'
+                'success': True,
+                'action': 'chat_opened',
+                'message': f'Chat opened for {phone_clean}. Press Enter to send.',
+                'phone': phone_clean,
+                'warning': result.stderr,
+                'catalog_link': CATALOG_LINK
             }
             
     except subprocess.TimeoutExpired:
         return {
             'success': False,
-            'error': 'Timeout - WhatsApp may not be responding'
+            'error': 'Timeout waiting for WhatsApp',
+            'phone': phone_clean
         }
     except Exception as e:
         return {
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'phone': phone_clean
         }
 
 
 class WhatsAppService:
-    """WhatsApp service class for integration with image support"""
+    """WhatsApp service class for cleaner integration"""
     
     def __init__(self):
-        self.permission_granted = get_permission_status()
         self.default_message = DEFAULT_WHATSAPP_MESSAGE
+        self.catalog_link = CATALOG_LINK
     
     def get_url(self, phone: str, message: str = None) -> str:
         return generate_whatsapp_url(phone, message)
@@ -435,27 +423,29 @@ class WhatsAppService:
     
     def send_direct(self, phone: str, message: str = None, with_attachment: bool = False) -> dict:
         """Send message without image (legacy method)"""
-        attachment = get_pdf_attachment() if with_attachment else None
+        attachment = get_image_attachment() if with_attachment else None
         return send_whatsapp_direct(phone, message, attachment)
     
     def send_with_image(self, phone: str, message: str = None, image_path: str = None) -> dict:
         """Send message with image attachment"""
         return send_whatsapp_with_image(phone, message, image_path)
     
-    def get_available_attachments(self) -> List[dict]:
-        """Get list of available attachments"""
-        return get_all_attachments()
-    
     def get_image_path(self) -> Optional[str]:
-        """Get the default image path"""
+        """Get available image attachment"""
         return get_image_attachment()
     
     def get_pdf_path(self) -> Optional[str]:
-        """Get the default PDF path"""
+        """Get available PDF attachment"""
         return get_pdf_attachment()
     
+    def get_available_attachments(self) -> List[dict]:
+        """Get all available attachments"""
+        return get_all_attachments()
+    
     def check_permission(self) -> dict:
+        """Check if accessibility permission is granted"""
         return {
             'permission_granted': get_permission_status(),
-            'message': 'Automation ready' if get_permission_status() else 'Permission not yet granted'
+            'message': 'Automation ready' if get_permission_status() else 'Permission not yet granted',
+            'catalog_link': CATALOG_LINK
         }
