@@ -10,17 +10,22 @@ Implements comprehensive search strategies across multiple sources:
 7. Yellow pages & chamber of commerce
 8. Marketplace seller lookup (Amazon, Flipkart)
 9. Related sports shops & gyms
-10. Data enrichment & verification
+10. CURATED PICKLEBALL COMPANIES - Direct website scraping
+
+NEW FEATURES:
+- Curated list of known pickleball importers/distributors in India
+- Website scraper to extract contact details from any URL
+- Enrich existing leads by visiting their websites
 """
 import json
 import os
 import re
 import asyncio
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Tuple
 from ddgs import DDGS
 import httpx
 from bs4 import BeautifulSoup
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import quote_plus, urlparse, urljoin
 import time
 
 
@@ -32,6 +37,162 @@ class SearchEngine:
                 self.cities_config = json.load(f)
         else:
             self.cities_config = {"tier_1": [], "tier_2": [], "tier_3": []}
+        
+        # === CURATED PICKLEBALL COMPANIES IN INDIA ===
+        # These are known importers, manufacturers, dealers, and distributors
+        self.curated_companies = [
+            # JOOLA India and Authorized Dealers
+            {
+                "name": "JOOLA India",
+                "role": "Manufacturer & Distributor",
+                "city": "Bengaluru",
+                "website": "https://joola.in",
+                "additional_urls": [
+                    "https://joola.in/pages/authorized-distributors",
+                    "https://joola.in/pages/contact-us"
+                ]
+            },
+            {
+                "name": "Selection Centre Sports (SCS Sports)",
+                "role": "Dealer (JOOLA Authorized)",
+                "city": "Mumbai",
+                "website": "https://scssports.in",
+                "additional_urls": ["https://scssports.in/contact-us"]
+            },
+            {
+                "name": "Pickleball Outlet",
+                "role": "JOOLA Authorized Dealer",
+                "city": "Hyderabad",
+                "website": "https://pickleballoutlet.in",
+                "additional_urls": ["https://pickleballoutlet.in/contact"]
+            },
+            {
+                "name": "Cialfo Sports",
+                "role": "JOOLA Authorized Dealer",
+                "city": "Chennai",
+                "website": "https://cialfosports.com",
+                "additional_urls": ["https://cialfosports.com/contact"]
+            },
+            {
+                "name": "Sporfy Store",
+                "role": "JOOLA Authorized Dealer",
+                "city": "Coimbatore",
+                "website": "https://sporfystore.com",
+                "additional_urls": ["https://sporfystore.com/contact-us"]
+            },
+            {
+                "name": "Fyre Sports",
+                "role": "JOOLA Authorized Dealer",
+                "city": "Jaipur",
+                "website": "https://fyresports.in",
+                "additional_urls": ["https://fyresports.in/contact"]
+            },
+            {
+                "name": "Play IQ",
+                "role": "JOOLA Authorized Dealer",
+                "city": "Bengaluru",
+                "website": "https://playiq.in",
+                "additional_urls": ["https://playiq.in/contact"]
+            },
+            {
+                "name": "Lodhi Sports",
+                "role": "JOOLA Authorized Dealer",
+                "city": "Delhi",
+                "website": "https://lodhisport.com",
+                "additional_urls": ["https://lodhisport.com/contact-us"]
+            },
+            # Major Manufacturers & Suppliers
+            {
+                "name": "Vinex Enterprises",
+                "role": "Manufacturer & Supplier",
+                "city": "Meerut",
+                "website": "https://www.vinex.in",
+                "additional_urls": [
+                    "https://www.vinex.in/Pickleball-Equipment.html",
+                    "https://www.vinex.in/contact-us.html"
+                ]
+            },
+            {
+                "name": "Metco Sports India",
+                "role": "Manufacturer & Dealer",
+                "city": "Meerut",
+                "website": "https://www.metcosportsindia.com",
+                "additional_urls": [
+                    "https://www.metcosportsindia.com/pickleball-pole-paddles-and-equipment.html",
+                    "https://www.metcosportsindia.com/contact-us.html"
+                ]
+            },
+            {
+                "name": "Strokess Sporting Solutions",
+                "role": "Manufacturer & Brand",
+                "city": "Vadodara",
+                "website": "https://strokess.com",
+                "additional_urls": ["https://strokess.com/contact"]
+            },
+            # Wholesalers & Distributors
+            {
+                "name": "Total Pickleball",
+                "role": "Wholesaler/Distributor",
+                "city": "Jaipur",
+                "website": "https://www.indiamart.com/total-pickleball",
+                "additional_urls": [
+                    "https://www.indiamart.com/total-pickleball/fitness-equipments.html",
+                    "https://www.indiamart.com/total-pickleball/aboutus.html"
+                ]
+            },
+            # Sports Equipment Companies
+            {
+                "name": "Cosco India",
+                "role": "Sports Equipment Manufacturer",
+                "city": "Delhi",
+                "website": "https://www.cosco.in",
+                "additional_urls": ["https://www.cosco.in/contact-us"]
+            },
+            {
+                "name": "Nivia Sports",
+                "role": "Sports Equipment Manufacturer",
+                "city": "Jalandhar",
+                "website": "https://niviasports.com",
+                "additional_urls": ["https://niviasports.com/contact-us"]
+            },
+            {
+                "name": "Vector X Sports",
+                "role": "Sports Equipment Manufacturer",
+                "city": "Meerut",
+                "website": "https://vectorxsports.com",
+                "additional_urls": ["https://vectorxsports.com/contact"]
+            },
+            # Online Retailers with Contact Info
+            {
+                "name": "Sports 365",
+                "role": "Online Retailer",
+                "city": "Mumbai",
+                "website": "https://www.sports365.in",
+                "additional_urls": ["https://www.sports365.in/contact-us"]
+            },
+            {
+                "name": "Racquet Point",
+                "role": "Racquet Sports Specialist",
+                "city": "Delhi",
+                "website": "https://racquetpoint.in",
+                "additional_urls": ["https://racquetpoint.in/contact"]
+            },
+            # Regional Distributors
+            {
+                "name": "Meerut Sports Industries Association",
+                "role": "Industry Association",
+                "city": "Meerut",
+                "website": "https://www.meerutsports.com",
+                "additional_urls": ["https://www.meerutsports.com/contact"]
+            },
+            {
+                "name": "Sports Wing",
+                "role": "Sports Equipment Dealer",
+                "city": "Chennai",
+                "website": "https://sportswing.in",
+                "additional_urls": ["https://sportswing.in/contact-us"]
+            },
+        ]
         
         # Keywords to search for
         self.keywords = [
@@ -173,8 +334,6 @@ class SearchEngine:
         self.skip_domains = [
             "youtube.com", "facebook.com", "twitter.com", "x.com",
             "instagram.com", "wikipedia.org", "pinterest.com",
-            "amazon.in", "amazon.com", "flipkart.com", "myntra.com",
-            "snapdeal.com", "meesho.com", "ajio.com",
             "news", "thehindu", "indiatimes", "ndtv", "india.com",
             "bbc.com", "cnn.com", "reuters", "bloomberg",
             "quora.com", "reddit.com", "medium.com",
@@ -197,7 +356,7 @@ class SearchEngine:
                 return tier
         return "tier_2"
 
-    def _extract_contact_info(self, text: str) -> Dict:
+    def _extract_contact_info(self, text: str, html_soup: Optional[BeautifulSoup] = None) -> Dict:
         """Extract email and phone from text with enhanced patterns."""
         contact = {}
         
@@ -216,12 +375,25 @@ class SearchEngine:
                 for e in emails 
                 if not any(x in e.lower() for x in [
                     'example', 'test', 'noreply', 'no-reply', 'admin@',
-                    'support@', 'info@example', 'email@', 'your@', 'name@'
+                    'support@', 'info@example', 'email@', 'your@', 'name@',
+                    'sentry.io', 'wixpress', 'google.com', 'facebook.com'
                 ])
             ]
             if filtered_emails:
                 contact["email"] = filtered_emails[0]
                 break
+        
+        # Also try to find email in mailto links (HTML)
+        if html_soup and not contact.get("email"):
+            mailto_links = html_soup.find_all("a", href=re.compile(r"mailto:", re.I))
+            for link in mailto_links:
+                href = link.get("href", "")
+                email_match = re.search(r"mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})", href)
+                if email_match:
+                    email = email_match.group(1)
+                    if not any(x in email.lower() for x in ['example', 'noreply', 'wixpress']):
+                        contact["email"] = email
+                        break
         
         # Phone patterns for India (enhanced)
         phone_patterns = [
@@ -249,17 +421,34 @@ class SearchEngine:
                     contact["phone"] = phone
                     break
         
+        # Also try tel: links in HTML
+        if html_soup and not contact.get("phone"):
+            tel_links = html_soup.find_all("a", href=re.compile(r"tel:", re.I))
+            for link in tel_links:
+                href = link.get("href", "")
+                phone_match = re.search(r"tel:[\+]?(\d[\d\s.-]{8,15})", href)
+                if phone_match:
+                    phone = re.sub(r'[\s.-]', '', phone_match.group(1))
+                    digits_only = re.sub(r'\D', '', phone)
+                    if 10 <= len(digits_only) <= 13:
+                        if not phone.startswith('+'):
+                            phone = '+91' + digits_only[-10:]
+                        contact["phone"] = phone
+                        break
+        
         # Try to extract WhatsApp number specifically
         whatsapp_patterns = [
             r"whatsapp[\s:]*\+?[\d\s.-]{10,15}",
             r"wa[\s:]*\+?[\d\s.-]{10,15}",
             r"📱[\s:]*\+?[\d\s.-]{10,15}",
+            r"wa\.me/(\d{10,15})",
+            r"api\.whatsapp\.com/send\?phone=(\d{10,15})",
         ]
         
         for pattern in whatsapp_patterns:
             matches = re.findall(pattern, text, re.IGNORECASE)
             if matches:
-                wa_num = re.sub(r'[^\d+]', '', matches[0])
+                wa_num = re.sub(r'[^\d+]', '', matches[0] if isinstance(matches[0], str) else str(matches[0]))
                 if len(wa_num) >= 10:
                     contact["whatsapp"] = wa_num if wa_num.startswith('+') else '+91' + wa_num[-10:]
                     if not contact.get("phone"):
@@ -353,52 +542,352 @@ class SearchEngine:
         
         self._last_request_time = current_time
 
+    async def _get_http_client(self) -> httpx.AsyncClient:
+        """Get or create HTTP client."""
+        if not self.http_client:
+            self.http_client = httpx.AsyncClient(
+                timeout=15.0, 
+                follow_redirects=True,
+                limits=httpx.Limits(max_connections=10),
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.5",
+                }
+            )
+        return self.http_client
+
+    async def scrape_website_contacts(self, url: str, follow_contact_pages: bool = True) -> Dict:
+        """
+        Scrape a website to extract contact information.
+        
+        Args:
+            url: The website URL to scrape
+            follow_contact_pages: Whether to also scrape contact/about pages
+            
+        Returns:
+            Dictionary with email, phone, whatsapp, address, and other contact info
+        """
+        result = {
+            "url": url,
+            "email": None,
+            "phone": None,
+            "whatsapp": None,
+            "address": None,
+            "contact_person": None,
+            "social_links": [],
+            "pages_scraped": [],
+            "success": False,
+            "error": None
+        }
+        
+        try:
+            client = await self._get_http_client()
+            self._rate_limit()
+            
+            # Scrape main page
+            response = await client.get(url)
+            
+            if response.status_code != 200:
+                result["error"] = f"HTTP {response.status_code}"
+                return result
+            
+            soup = BeautifulSoup(response.text, "html.parser")
+            text = soup.get_text(separator=" ", strip=True)
+            result["pages_scraped"].append(url)
+            
+            # Extract contact info from main page
+            contact = self._extract_contact_info(text, soup)
+            result.update({k: v for k, v in contact.items() if v})
+            
+            # Try to find address
+            address = self._extract_address(text, soup)
+            if address:
+                result["address"] = address
+            
+            # Look for social links
+            social_links = self._extract_social_links(soup, url)
+            result["social_links"] = social_links
+            
+            # If enabled, follow contact/about pages
+            if follow_contact_pages:
+                contact_pages = self._find_contact_pages(soup, url)
+                
+                for page_url in contact_pages[:3]:  # Limit to 3 contact pages
+                    if page_url in result["pages_scraped"]:
+                        continue
+                    
+                    try:
+                        self._rate_limit()
+                        page_response = await client.get(page_url)
+                        
+                        if page_response.status_code == 200:
+                            page_soup = BeautifulSoup(page_response.text, "html.parser")
+                            page_text = page_soup.get_text(separator=" ", strip=True)
+                            result["pages_scraped"].append(page_url)
+                            
+                            page_contact = self._extract_contact_info(page_text, page_soup)
+                            
+                            # Update if we found new info
+                            if page_contact.get("email") and not result.get("email"):
+                                result["email"] = page_contact["email"]
+                            if page_contact.get("phone") and not result.get("phone"):
+                                result["phone"] = page_contact["phone"]
+                            if page_contact.get("whatsapp") and not result.get("whatsapp"):
+                                result["whatsapp"] = page_contact["whatsapp"]
+                            
+                            # Try to find address on contact page
+                            if not result.get("address"):
+                                address = self._extract_address(page_text, page_soup)
+                                if address:
+                                    result["address"] = address
+                                    
+                    except Exception as page_error:
+                        pass  # Continue with other pages
+            
+            result["success"] = bool(result.get("email") or result.get("phone"))
+            
+        except Exception as e:
+            result["error"] = str(e)
+        
+        return result
+
+    def _extract_address(self, text: str, soup: Optional[BeautifulSoup] = None) -> Optional[str]:
+        """Extract address from text or HTML."""
+        address = None
+        
+        # Try specific HTML tags first
+        if soup:
+            # Look for address tag
+            for tag in soup.find_all(["address"]):
+                tag_text = tag.get_text(strip=True)
+                if 20 < len(tag_text) < 300:
+                    return tag_text[:250]
+            
+            # Look for address-related classes
+            for tag in soup.find_all(["div", "span", "p"], class_=re.compile(r"address|location|office", re.I)):
+                tag_text = tag.get_text(strip=True)
+                if 20 < len(tag_text) < 300 and any(x in tag_text.lower() for x in ["india", "road", "street", "nagar", "pin", "zip"]):
+                    return tag_text[:250]
+        
+        # Try text patterns
+        address_patterns = [
+            r"(?:address|office|location)[\s:]+([^,\n]{20,200}(?:india|pin|zip|\d{6}))",
+            r"(?:corporate office|head office|registered office)[\s:]+([^,\n]{20,200})",
+            r"(\d+[,/]?\s*[\w\s,]+(?:road|street|nagar|colony|area|sector|phase|block)[\w\s,]*(?:india|\d{6}))",
+        ]
+        
+        for pattern in address_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                return match.group(1).strip()[:250]
+        
+        return None
+
+    def _extract_social_links(self, soup: BeautifulSoup, base_url: str) -> List[str]:
+        """Extract social media links from page."""
+        social_domains = ["linkedin.com", "facebook.com", "twitter.com", "instagram.com", "youtube.com"]
+        social_links = []
+        
+        for link in soup.find_all("a", href=True):
+            href = link.get("href", "")
+            for domain in social_domains:
+                if domain in href:
+                    social_links.append(href)
+                    break
+        
+        return list(set(social_links))[:5]
+
+    def _find_contact_pages(self, soup: BeautifulSoup, base_url: str) -> List[str]:
+        """Find contact, about, and related pages."""
+        contact_keywords = ["contact", "about", "reach", "connect", "enquiry", "inquiry", "dealer", "distributor", "where-to-buy"]
+        contact_pages = []
+        
+        parsed_base = urlparse(base_url)
+        base_domain = f"{parsed_base.scheme}://{parsed_base.netloc}"
+        
+        for link in soup.find_all("a", href=True):
+            href = link.get("href", "").lower()
+            text = link.get_text().lower()
+            
+            # Check if link contains contact-related keywords
+            if any(kw in href or kw in text for kw in contact_keywords):
+                full_url = href if href.startswith("http") else urljoin(base_domain, href)
+                
+                # Only include pages from same domain
+                if parsed_base.netloc in full_url:
+                    contact_pages.append(full_url)
+        
+        return list(set(contact_pages))
+
+    async def discover_from_curated_list(self, city: Optional[str] = None) -> List[Dict]:
+        """
+        Discover leads from the curated list of known pickleball companies.
+        Scrapes each website to get contact details.
+        
+        Args:
+            city: Optional city filter
+            
+        Returns:
+            List of enriched business dictionaries
+        """
+        results = []
+        
+        companies = self.curated_companies
+        if city:
+            companies = [c for c in companies if c.get("city", "").lower() == city.lower()]
+        
+        print(f"[Curated List] Scraping {len(companies)} known pickleball companies...")
+        
+        for i, company in enumerate(companies):
+            print(f"  [{i+1}/{len(companies)}] {company['name']}...")
+            
+            # Scrape main website
+            website = company.get("website", "")
+            scraped = await self.scrape_website_contacts(website, follow_contact_pages=True)
+            
+            # Also scrape additional URLs if provided
+            additional_urls = company.get("additional_urls", [])
+            for add_url in additional_urls:
+                if add_url not in scraped.get("pages_scraped", []):
+                    try:
+                        self._rate_limit()
+                        add_scraped = await self.scrape_website_contacts(add_url, follow_contact_pages=False)
+                        
+                        if add_scraped.get("email") and not scraped.get("email"):
+                            scraped["email"] = add_scraped["email"]
+                        if add_scraped.get("phone") and not scraped.get("phone"):
+                            scraped["phone"] = add_scraped["phone"]
+                        if add_scraped.get("whatsapp") and not scraped.get("whatsapp"):
+                            scraped["whatsapp"] = add_scraped["whatsapp"]
+                        if add_scraped.get("address") and not scraped.get("address"):
+                            scraped["address"] = add_scraped["address"]
+                    except:
+                        pass
+            
+            # Create business record
+            business = {
+                "name": company["name"],
+                "city": company.get("city", ""),
+                "tier": self._get_tier(company.get("city", "")),
+                "type": company.get("role", "Distributor"),
+                "website": website,
+                "email": scraped.get("email"),
+                "phone": scraped.get("phone"),
+                "whatsapp": scraped.get("whatsapp"),
+                "address": scraped.get("address"),
+                "source": "curated_list",
+                "priority_score": 15,  # High priority for curated companies
+                "pages_scraped": len(scraped.get("pages_scraped", [])),
+                "social_links": scraped.get("social_links", [])
+            }
+            
+            results.append(business)
+            
+            # Rate limit between companies
+            await asyncio.sleep(1)
+        
+        # Sort by whether we got contact info
+        results.sort(key=lambda x: (bool(x.get("email")), bool(x.get("phone"))), reverse=True)
+        
+        print(f"[Curated List] Found contacts for {sum(1 for r in results if r.get('email') or r.get('phone'))}/{len(results)} companies")
+        
+        return results
+
+    async def enrich_lead(self, lead: Dict) -> Dict:
+        """
+        Enrich a single lead by visiting its website.
+        
+        Args:
+            lead: Dictionary with at least 'website' field
+            
+        Returns:
+            Updated lead dictionary with contact info
+        """
+        website = lead.get("website", "")
+        if not website:
+            return lead
+        
+        # Ensure URL has scheme
+        if not website.startswith("http"):
+            website = "https://" + website
+        
+        scraped = await self.scrape_website_contacts(website, follow_contact_pages=True)
+        
+        # Update lead with scraped info (only if not already present)
+        if scraped.get("email") and not lead.get("email"):
+            lead["email"] = scraped["email"]
+        if scraped.get("phone") and not lead.get("phone"):
+            lead["phone"] = scraped["phone"]
+        if scraped.get("whatsapp") and not lead.get("whatsapp"):
+            lead["whatsapp"] = scraped["whatsapp"]
+        if scraped.get("address") and not lead.get("address"):
+            lead["address"] = scraped["address"]
+        
+        lead["enriched"] = True
+        lead["pages_scraped"] = scraped.get("pages_scraped", [])
+        
+        return lead
+
+    async def enrich_leads_batch(self, leads: List[Dict], max_concurrent: int = 3) -> List[Dict]:
+        """
+        Enrich multiple leads by visiting their websites.
+        
+        Args:
+            leads: List of lead dictionaries
+            max_concurrent: Max concurrent requests
+            
+        Returns:
+            List of enriched leads
+        """
+        print(f"[Enrichment] Processing {len(leads)} leads...")
+        
+        enriched = []
+        
+        # Process in batches to be respectful
+        for i in range(0, len(leads), max_concurrent):
+            batch = leads[i:i+max_concurrent]
+            
+            tasks = [self.enrich_lead(lead.copy()) for lead in batch]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for j, result in enumerate(batch_results):
+                if isinstance(result, Exception):
+                    enriched.append(batch[j])
+                else:
+                    enriched.append(result)
+            
+            print(f"  Processed {min(i+max_concurrent, len(leads))}/{len(leads)} leads")
+            
+            # Rate limit between batches
+            await asyncio.sleep(2)
+        
+        success_count = sum(1 for l in enriched if l.get("enriched") and (l.get("email") or l.get("phone")))
+        print(f"[Enrichment] Successfully enriched {success_count}/{len(leads)} leads with contact info")
+        
+        return enriched
+
     async def _fetch_page_details(self, url: str) -> Dict:
         """Fetch additional details from a webpage."""
         details = {"email": None, "phone": None, "address": None, "whatsapp": None}
         try:
-            if not self.http_client:
-                self.http_client = httpx.AsyncClient(
-                    timeout=10.0, 
-                    follow_redirects=True,
-                    limits=httpx.Limits(max_connections=10)
-                )
-            
+            client = await self._get_http_client()
             self._rate_limit()
             
-            response = await self.http_client.get(url, headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-            })
+            response = await client.get(url)
             
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, "html.parser")
                 text = soup.get_text(separator=" ", strip=True)
                 
                 # Extract contact info
-                contact = self._extract_contact_info(text)
+                contact = self._extract_contact_info(text, soup)
                 details.update(contact)
                 
-                # Try to find address
-                address_patterns = [
-                    r"address[\s:]+([^,\n]{20,150})",
-                    r"located at[\s:]+([^,\n]{20,150})",
-                    r"office[\s:]+([^,\n]{20,150})",
-                ]
-                
-                for pattern in address_patterns:
-                    match = re.search(pattern, text, re.IGNORECASE)
-                    if match:
-                        details["address"] = match.group(1).strip()[:200]
-                        break
-                
-                # Also check specific HTML elements
-                for tag in soup.find_all(["address", "div", "span"], class_=re.compile(r"address|location|contact", re.I)):
-                    tag_text = tag.get_text(strip=True)
-                    if 20 < len(tag_text) < 200 and any(x in tag_text.lower() for x in ["india", "road", "street", "nagar"]):
-                        details["address"] = tag_text
-                        break
+                # Extract address
+                address = self._extract_address(text, soup)
+                if address:
+                    details["address"] = address
                         
         except Exception as e:
             pass
@@ -602,9 +1091,13 @@ class SearchEngine:
         Args:
             city: City name
             strategy: One of 'directories', 'manufacturers', 'tradeshows', 
-                     'linkedin', 'google', 'yellowpages', 'marketplaces', 'sports_shops'
+                     'linkedin', 'google', 'yellowpages', 'marketplaces', 'sports_shops',
+                     'curated' (for curated list)
             limit: Maximum results
         """
+        if strategy == "curated":
+            return await self.discover_from_curated_list(city)
+        
         templates_map = {
             "directories": self.directory_search_templates,
             "manufacturers": self.manufacturer_search_templates,
@@ -689,6 +1182,10 @@ class SearchEngine:
                 pass
         
         return all_results[:limit]
+
+    def get_curated_companies(self) -> List[Dict]:
+        """Return the curated list of known pickleball companies."""
+        return self.curated_companies
 
     async def close(self):
         """Close HTTP client."""
