@@ -20,25 +20,8 @@ UPLOADS_DIR = BASE_DIR / "uploads"
 # Google Drive Link for catalog/brochure
 CATALOG_LINK = "https://drive.google.com/file/d/1h8w2aM2SvxvX7R40M51rAZznkljrmwHl/view?usp=sharing"
 
-
-class EmailService:
-    """Gmail SMTP email service for sending proposals with attachments."""
-    
-    # Default attachments from uploads folder
-    DEFAULT_ATTACHMENTS = [
-        "MANH THANG PICKLEBALL FACTORY.pdf_20250919_102104_0000.pdf",
-        "WhatsApp Image 2025-09-19 at 08.58.41.jpeg"
-    ]
-    
-    def __init__(self):
-        self.smtp_server = "smtp.gmail.com"
-        self.smtp_port = 587
-        self.sender_email = os.getenv("GMAIL_EMAIL", "")
-        self.sender_password = os.getenv("GMAIL_APP_PASSWORD", "")
-        self.uploads_dir = UPLOADS_DIR
-        
-        # Default proposal template with Google Drive link
-        self.default_template = f"""Dear Sir / Madam,
+# Exact email template as provided
+EMAIL_TEMPLATE = f"""Dear Sir / Madam,
 
 Greetings.
 
@@ -46,48 +29,48 @@ We are pleased to introduce Manh Thang Industrial Service Development Company Li
 
 Manh Thang Pickleball Factory operates with advanced rotational hot molding technology, strict quality management systems, and international compliance standards. The factory currently supplies to domestic and export markets including the USA and Europe.
 
-📎 Product Catalog & Factory Details: {CATALOG_LINK}
+📎 View Our Product Catalog & Factory Details: {CATALOG_LINK}
 
 ✅ Product Highlight – E-WIN (ONE WIN) Pickleball Balls
-* Certified compliant with USA Pickleball Association (USAPA) standards
-* Designed for international competition and tournaments
-* Indoor ball weight: ~26 g
-* Outdoor ball weight: ~26.5 g
-* Diameter: 74 mm (±5%)
-* Hardness: 44–46 HD (balanced control & durability)
-* 40 precision-drilled holes
-* Manufactured from high-quality PE virgin plastic with performance additives
-* Stable in hot and cold climates; does not soften during extended play
-* High-visibility green and yellow colors
+• Certified compliant with USA Pickleball Association (USAPA) standards
+• Designed for international competition and tournaments
+• Indoor ball weight: ~26 g
+• Outdoor ball weight: ~26.5 g
+• Diameter: 74 mm (±5%)
+• Hardness: 44–46 HD (balanced control & durability)
+• 40 precision-drilled holes
+• Manufactured from high-quality PE virgin plastic with performance additives
+• Stable in hot and cold climates; does not soften during extended play
+• High-visibility green and yellow colors
 
 🏭 Manufacturing Strength
-* 5 automatic rotational casting technology production lines
-* Current capacity: 25,000–30,000 balls per day
-* Expansion plan: up to 50,000 balls per day
-* Factory area: over 7,000 m²
-* 65 skilled staff members
-* Continuous process improvement and strict inspection before packing
+• 5 automatic rotational casting technology production lines
+• Current capacity: 25,000–30,000 balls per day
+• Expansion plan: up to 50,000 balls per day
+• Factory area: over 7,000 m²
+• 65 skilled staff members
+• Continuous process improvement and strict inspection before packing
 
 📦 Product Portfolio
-* S2 Tournament Pickleball
-* E-WIN (ONE WIN) Tournament Series
-* Vincent Series
-* Multi-color Pickleballs
-* Mini Pickleballs
-* 100% Biodegradable Pickleballs (eco-friendly option)
+• S2 Tournament Pickleball
+• E-WIN (ONE WIN) Tournament Series
+• Vincent Series
+• Multi-color Pickleballs
+• Mini Pickleballs
+• 100% Biodegradable Pickleballs (eco-friendly option)
 
 🤝 Why Partner With Manh Thang
-* Consistent tournament-grade quality
-* Competitive factory-direct pricing
-* OEM / Private label manufacturing available
-* Reliable production capacity & delivery schedules
-* Suitable for clubs, academies, tournaments, retailers, and e-commerce platforms
+• Consistent tournament-grade quality
+• Competitive factory-direct pricing
+• OEM / Private label manufacturing available
+• Reliable production capacity & delivery schedules
+• Suitable for clubs, academies, tournaments, retailers, and e-commerce platforms
 
 We are currently appointing India distributors, state partners, and bulk buyers and would welcome discussions on:
-* Distribution / dealership model
-* Bulk purchase pricing
-* OEM branding
-* Sample evaluation
+• Distribution / dealership model
+• Bulk purchase pricing
+• OEM branding
+• Sample evaluation
 
 📞 Factory Contact (Vietnam – Head Office)
 Manh Thang Industrial Service Development Company Limited
@@ -105,6 +88,23 @@ Looking forward to your positive response and the opportunity to build a long-te
 
 Warm regards,
 Vijay Pawar"""
+
+
+class EmailService:
+    """Gmail SMTP email service for sending proposals with attachments."""
+    
+    # Default attachments from uploads folder
+    DEFAULT_ATTACHMENTS = [
+        "WhatsApp Image 2025-09-19 at 08.58.41.jpeg"
+    ]
+    
+    def __init__(self):
+        self.smtp_server = "smtp.gmail.com"
+        self.smtp_port = 587
+        self.sender_email = os.getenv("GMAIL_EMAIL", "")
+        self.sender_password = os.getenv("GMAIL_APP_PASSWORD", "")
+        self.uploads_dir = UPLOADS_DIR
+        self.default_template = EMAIL_TEMPLATE
 
     def is_configured(self) -> bool:
         """Check if email service is properly configured."""
@@ -152,7 +152,6 @@ Vijay Pawar"""
             
             # Clean filename for attachment
             clean_name = file_path.name
-            # Shorten long names
             if len(clean_name) > 50:
                 ext = file_path.suffix
                 clean_name = clean_name[:45] + ext
@@ -178,20 +177,7 @@ Vijay Pawar"""
         include_attachments: bool = True,
         attachment_files: Optional[List[str]] = None
     ) -> dict:
-        """
-        Send email via Gmail SMTP with attachments.
-        
-        Args:
-            to_email: Recipient email address
-            subject: Email subject line
-            body: Email body (uses default template if not provided)
-            recipient_name: Name of recipient for personalization
-            include_attachments: Whether to include file attachments
-            attachment_files: List of filenames to attach (uses defaults if None)
-            
-        Returns:
-            dict with success status and message
-        """
+        """Send email via Gmail SMTP with attachments."""
         if not self.is_configured():
             return {
                 "success": False,
@@ -225,12 +211,12 @@ Vijay Pawar"""
             text_part = MIMEText(email_body, "plain", "utf-8")
             alt_part.attach(text_part)
             
-            # HTML version (convert newlines to <br> and make links clickable)
+            # HTML version - convert to proper HTML with clickable link
             html_body = email_body.replace("\n", "<br>")
             # Make the Google Drive link clickable
             html_body = html_body.replace(
                 CATALOG_LINK,
-                f'<a href="{CATALOG_LINK}" style="color: #1a73e8; text-decoration: underline;">View Product Catalog & Factory Details</a>'
+                f'<a href="{CATALOG_LINK}" style="color: #1a73e8; text-decoration: underline; font-weight: bold;">Click Here to View Catalog</a>'
             )
             html_content = f"""
             <html>
@@ -246,7 +232,7 @@ Vijay Pawar"""
             
             msg.attach(alt_part)
             
-            # Add attachments
+            # Add attachments (only small files)
             attached_files = []
             skipped_files = []
             
@@ -256,7 +242,6 @@ Vijay Pawar"""
                 for filename in files_to_attach:
                     file_path = self.uploads_dir / filename
                     if file_path.exists():
-                        # Check file size (Gmail limit is ~25MB, but we'll be conservative)
                         size_mb = file_path.stat().st_size / (1024 * 1024)
                         if size_mb > 20:
                             skipped_files.append(f"{filename} (too large: {size_mb:.1f}MB)")
@@ -284,7 +269,6 @@ Vijay Pawar"""
             
             if skipped_files:
                 result["skipped_attachments"] = skipped_files
-                result["message"] += f" (skipped {len(skipped_files)} files)"
             
             return result
             
@@ -308,34 +292,43 @@ Vijay Pawar"""
         self,
         recipients: list,
         subject: str = None,
-        include_attachments: bool = True
+        include_attachments: bool = True,
+        delay_seconds: int = 2
     ) -> dict:
         """
-        Send emails to multiple recipients.
+        Send emails to multiple recipients with delay between sends.
         
         Args:
             recipients: List of dicts with 'email' and optional 'name'
             subject: Email subject line
             include_attachments: Whether to include file attachments
+            delay_seconds: Delay between emails to avoid rate limits
             
         Returns:
             dict with success/failure counts and details
         """
+        import time
+        
         results = {
             "total": len(recipients),
             "sent": 0,
             "failed": 0,
+            "skipped": 0,
             "details": []
         }
         
-        for recipient in recipients:
+        for i, recipient in enumerate(recipients):
             email = recipient.get("email")
             name = recipient.get("name")
             
             if not email:
-                results["failed"] += 1
-                results["details"].append({"email": None, "success": False, "error": "No email"})
+                results["skipped"] += 1
+                results["details"].append({"email": None, "success": False, "error": "No email address"})
                 continue
+            
+            # Add delay between emails (except first one)
+            if i > 0:
+                time.sleep(delay_seconds)
             
             result = self.send_email(
                 to_email=email,
@@ -351,9 +344,9 @@ Vijay Pawar"""
             
             results["details"].append({
                 "email": email,
+                "name": name,
                 "success": result.get("success"),
-                "error": result.get("error"),
-                "attachments": result.get("attachments", [])
+                "error": result.get("error")
             })
         
         return results
