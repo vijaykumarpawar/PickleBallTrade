@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 import os
 from datetime import datetime
+from typing import Optional, Dict, Any
 
 class DatabaseManager:
     def __init__(self, db_path='agent/data/leads.db'):
@@ -31,28 +32,28 @@ class DatabaseManager:
                 whatsapp_sent INTEGER DEFAULT 0,
                 email_sent_at TEXT,
                 whatsapp_sent_at TEXT,
+                enriched INTEGER DEFAULT 0,
+                enriched_at TEXT,
                 created_at TEXT
             )
         """)
         cursor.execute("CREATE TABLE IF NOT EXISTS proposals (id INTEGER PRIMARY KEY, entity_id INTEGER, proposal_type TEXT, content TEXT, created_at TEXT)")
         
         # Migration: Add new columns if they don't exist
-        try:
-            cursor.execute("ALTER TABLE entities ADD COLUMN email_sent INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
-        try:
-            cursor.execute("ALTER TABLE entities ADD COLUMN whatsapp_sent INTEGER DEFAULT 0")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            cursor.execute("ALTER TABLE entities ADD COLUMN email_sent_at TEXT")
-        except sqlite3.OperationalError:
-            pass
-        try:
-            cursor.execute("ALTER TABLE entities ADD COLUMN whatsapp_sent_at TEXT")
-        except sqlite3.OperationalError:
-            pass
+        migrations = [
+            "ALTER TABLE entities ADD COLUMN email_sent INTEGER DEFAULT 0",
+            "ALTER TABLE entities ADD COLUMN whatsapp_sent INTEGER DEFAULT 0",
+            "ALTER TABLE entities ADD COLUMN email_sent_at TEXT",
+            "ALTER TABLE entities ADD COLUMN whatsapp_sent_at TEXT",
+            "ALTER TABLE entities ADD COLUMN enriched INTEGER DEFAULT 0",
+            "ALTER TABLE entities ADD COLUMN enriched_at TEXT",
+        ]
+        
+        for migration in migrations:
+            try:
+                cursor.execute(migration)
+            except sqlite3.OperationalError:
+                pass  # Column already exists
             
         conn.commit()
         conn.close()
@@ -72,7 +73,9 @@ class DatabaseManager:
             datetime.now().isoformat()
         ))
         conn.commit()
+        entity_id = cursor.lastrowid
         conn.close()
+        return entity_id
 
     def get_all_entities(self):
         conn = sqlite3.connect(self.db_path)
@@ -91,6 +94,40 @@ class DatabaseManager:
         row = cursor.fetchone()
         conn.close()
         return dict(row) if row else None
+
+    def update_entity(self, entity_id: int, updates: Dict[str, Any]) -> bool:
+        """
+        Update an entity with new data.
+        
+        Args:
+            entity_id: The entity ID to update
+            updates: Dictionary of fields to update (only non-None values will be updated)
+            
+        Returns:
+            True if entity was updated, False otherwise
+        """
+        # Filter out None values - only update fields with actual values
+        filtered_updates = {k: v for k, v in updates.items() if v is not None}
+        
+        if not filtered_updates:
+            return False
+        
+        # Build update query dynamically
+        set_clause = ", ".join([f"{key} = ?" for key in filtered_updates.keys()])
+        values = list(filtered_updates.values())
+        values.append(entity_id)
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        query = f"UPDATE entities SET {set_clause} WHERE id = ?"
+        cursor.execute(query, values)
+        
+        conn.commit()
+        affected = cursor.rowcount
+        conn.close()
+        
+        return affected > 0
 
     def mark_email_sent(self, entity_id):
         """Mark an entity as having received an email."""
@@ -118,6 +155,19 @@ class DatabaseManager:
         conn.close()
         return affected > 0
 
+    def mark_enriched(self, entity_id):
+        """Mark an entity as having been enriched with scraped data."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE entities SET enriched = 1, enriched_at = ? WHERE id = ?",
+            (datetime.now().isoformat(), entity_id)
+        )
+        conn.commit()
+        affected = cursor.rowcount
+        conn.close()
+        return affected > 0
+
     def reset_sent_status(self, entity_id, channel=None):
         """Reset sent status for an entity. channel can be 'email', 'whatsapp', or None for both."""
         conn = sqlite3.connect(self.db_path)
@@ -135,6 +185,22 @@ class DatabaseManager:
         conn.close()
         return affected > 0
 
+    def get_entities_needing_enrichment(self, limit: int = 50):
+        """Get entities with website but missing email or phone."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM entities 
+            WHERE website IS NOT NULL AND website != ''
+            AND (email IS NULL OR email = '' OR phone IS NULL OR phone = '')
+            AND (enriched IS NULL OR enriched = 0)
+            LIMIT ?
+        """, (limit,))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
     def get_stats(self):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
@@ -146,13 +212,46 @@ class DatabaseManager:
         emails_sent = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM entities WHERE whatsapp_sent = 1")
         whatsapp_sent = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM entities WHERE enriched = 1")
+        enriched = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM entities WHERE email IS NOT NULL AND email != ''")
+        with_email = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM entities WHERE phone IS NOT NULL AND phone != ''")
+        with_phone = cursor.fetchone()[0]
         conn.close()
         return {
             "total_entities": total,
             "by_type": by_type,
             "emails_sent": emails_sent,
-            "whatsapp_sent": whatsapp_sent
+            "whatsapp_sent": whatsapp_sent,
+            "enriched": enriched,
+            "with_email": with_email,
+            "with_phone": with_phone
         }
+
+    def search_entities(self, query: str, limit: int = 20):
+        """Search entities by name, city, or type."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM entities 
+            WHERE name LIKE ? OR city LIKE ? OR type LIKE ?
+            LIMIT ?
+        """, (f"%{query}%", f"%{query}%", f"%{query}%", limit))
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(row) for row in rows]
+
+    def delete_entity(self, entity_id: int) -> bool:
+        """Delete an entity by ID."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
+        conn.commit()
+        affected = cursor.rowcount
+        conn.close()
+        return affected > 0
 
     def export_entities(self, path="exports/leads.csv"):
         os.makedirs(os.path.dirname(path), exist_ok=True)
