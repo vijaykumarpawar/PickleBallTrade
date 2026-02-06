@@ -63,6 +63,24 @@ class WhatsAppRequest(BaseModel):
     include_image: bool = True  # Include product image from uploads folder
 
 
+class ScrapeRequest(BaseModel):
+    url: str
+    follow_contact_pages: bool = True
+
+
+class EnrichRequest(BaseModel):
+    entity_ids: Optional[List[int]] = None  # If None, enrich all leads
+    limit: Optional[int] = 50  # Max leads to enrich at once
+
+
+class AddLeadRequest(BaseModel):
+    name: str
+    website: str
+    city: Optional[str] = None
+    type: Optional[str] = "Distributor"
+    scrape_contacts: bool = True  # Auto-scrape website for contact info
+
+
 @app.get("/")
 async def root():
     return {"message": "Pickleball Agent API", "status": "running"}
@@ -97,6 +115,7 @@ async def discover_entities(request: DiscoverRequest):
     - yellowpages: Yellow pages & chamber of commerce
     - marketplaces: Amazon/Flipkart seller lookup
     - sports_shops: Related sports shops & academies
+    - curated: Known pickleball companies from curated list
     
     Set deep_search=True for comprehensive search using ALL strategies.
     """
@@ -176,9 +195,221 @@ async def list_strategies():
                 "name": "Related Sports Shops",
                 "description": "Tennis/badminton shops, sports academies, clubs",
                 "priority": "Medium - Potential pickleball distributors"
+            },
+            {
+                "id": "curated",
+                "name": "🌟 Curated Companies List",
+                "description": "Known pickleball importers, distributors, JOOLA dealers etc.",
+                "priority": "Highest - Verified companies with direct website scraping"
             }
         ],
         "note": "Use deep_search=True in /discover to search ALL strategies at once"
+    }
+
+
+# ============ CURATED COMPANIES & SCRAPING ============
+
+@app.get("/curated")
+async def get_curated_companies():
+    """Get the curated list of known pickleball companies in India."""
+    companies = search_engine.get_curated_companies()
+    return {
+        "companies": companies,
+        "count": len(companies),
+        "categories": {
+            "joola_dealers": [c for c in companies if "JOOLA" in c.get("role", "")],
+            "manufacturers": [c for c in companies if "Manufacturer" in c.get("role", "")],
+            "distributors": [c for c in companies if "Distributor" in c.get("role", "")],
+            "retailers": [c for c in companies if "Retailer" in c.get("role", "")]
+        }
+    }
+
+
+@app.post("/discover/curated")
+async def discover_from_curated(city: Optional[str] = None):
+    """
+    Discover leads from the curated list of known pickleball companies.
+    Automatically scrapes websites to extract contact details.
+    
+    This is the most reliable source as it contains verified companies.
+    """
+    results = await search_engine.discover_from_curated_list(city)
+    
+    stored = 0
+    for result in results:
+        classified = classifier.classify(result)
+        db.store_entity(classified)
+        stored += 1
+    
+    with_contacts = sum(1 for r in results if r.get("email") or r.get("phone"))
+    
+    return {
+        "source": "curated_list",
+        "city_filter": city,
+        "discovered": len(results),
+        "with_contacts": with_contacts,
+        "stored": stored,
+        "companies": [{"name": r["name"], "email": r.get("email"), "phone": r.get("phone")} for r in results]
+    }
+
+
+@app.post("/scrape")
+async def scrape_website(request: ScrapeRequest):
+    """
+    Scrape a website URL to extract contact information.
+    
+    Extracts:
+    - Email addresses (including mailto: links)
+    - Phone numbers (Indian format)
+    - WhatsApp numbers
+    - Physical address
+    - Social media links
+    
+    Set follow_contact_pages=True to also scrape /contact, /about pages.
+    """
+    result = await search_engine.scrape_website_contacts(
+        request.url, 
+        follow_contact_pages=request.follow_contact_pages
+    )
+    return result
+
+
+@app.post("/enrich")
+async def enrich_leads(request: EnrichRequest):
+    """
+    Enrich existing leads by scraping their website URLs for contact info.
+    
+    This will visit each lead's website and extract:
+    - Email addresses
+    - Phone numbers
+    - WhatsApp numbers
+    - Address
+    
+    If entity_ids is provided, only those leads are enriched.
+    Otherwise, enriches all leads with website but missing contact info.
+    """
+    entities = db.get_all_entities()
+    
+    # Filter to leads that need enrichment
+    if request.entity_ids:
+        to_enrich = [e for e in entities if e["id"] in request.entity_ids]
+    else:
+        # Get leads with website but missing email/phone
+        to_enrich = [
+            e for e in entities 
+            if e.get("website") and (not e.get("email") or not e.get("phone"))
+        ]
+    
+    # Limit
+    to_enrich = to_enrich[:request.limit]
+    
+    if not to_enrich:
+        return {
+            "success": True,
+            "message": "No leads need enrichment",
+            "enriched": 0
+        }
+    
+    # Enrich leads
+    enriched_leads = await search_engine.enrich_leads_batch(to_enrich)
+    
+    # Update database with enriched info
+    updated = 0
+    for lead in enriched_leads:
+        if lead.get("enriched"):
+            db.update_entity(lead["id"], {
+                "email": lead.get("email"),
+                "phone": lead.get("phone"),
+                "whatsapp": lead.get("whatsapp"),
+                "address": lead.get("address")
+            })
+            updated += 1
+    
+    return {
+        "success": True,
+        "processed": len(to_enrich),
+        "enriched": updated,
+        "leads": [
+            {
+                "id": l["id"],
+                "name": l["name"],
+                "email": l.get("email"),
+                "phone": l.get("phone"),
+                "enriched": l.get("enriched", False)
+            } 
+            for l in enriched_leads
+        ]
+    }
+
+
+@app.post("/enrich/{entity_id}")
+async def enrich_single_lead(entity_id: int):
+    """Enrich a single lead by scraping its website."""
+    entity = db.get_entity_by_id(entity_id)
+    
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    
+    if not entity.get("website"):
+        raise HTTPException(status_code=400, detail="Entity has no website URL")
+    
+    # Scrape website
+    enriched = await search_engine.enrich_lead(dict(entity))
+    
+    if enriched.get("enriched"):
+        # Update database
+        db.update_entity(entity_id, {
+            "email": enriched.get("email"),
+            "phone": enriched.get("phone"),
+            "whatsapp": enriched.get("whatsapp"),
+            "address": enriched.get("address")
+        })
+    
+    return {
+        "success": True,
+        "entity_id": entity_id,
+        "name": entity["name"],
+        "website": entity["website"],
+        "email": enriched.get("email"),
+        "phone": enriched.get("phone"),
+        "whatsapp": enriched.get("whatsapp"),
+        "address": enriched.get("address"),
+        "pages_scraped": enriched.get("pages_scraped", [])
+    }
+
+
+@app.post("/leads/add")
+async def add_lead_manually(request: AddLeadRequest):
+    """
+    Add a lead manually with automatic website scraping.
+    
+    Use this to add known companies from the curated list or other sources.
+    If scrape_contacts=True, will automatically visit the website to get contact info.
+    """
+    lead = {
+        "name": request.name,
+        "website": request.website,
+        "city": request.city,
+        "type": request.type,
+        "source": "manual_add"
+    }
+    
+    # Optionally scrape website
+    if request.scrape_contacts:
+        scraped = await search_engine.scrape_website_contacts(request.website)
+        lead["email"] = scraped.get("email")
+        lead["phone"] = scraped.get("phone")
+        lead["whatsapp"] = scraped.get("whatsapp")
+        lead["address"] = scraped.get("address")
+    
+    # Classify and store
+    classified = classifier.classify(lead)
+    db.store_entity(classified)
+    
+    return {
+        "success": True,
+        "lead": classified,
+        "scraped": request.scrape_contacts
     }
 
 
