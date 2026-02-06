@@ -683,6 +683,49 @@ async def get_whatsapp_attachments():
     }
 
 
+
+
+# AUTO-SEND ENDPOINT
+
+class AutoSendRequest(BaseModel):
+    skip_already_sent: bool = True
+    limit: Optional[int] = None
+    delay_seconds: int = 2
+    include_attachments: bool = True
+
+@app.post("/email/send-all")
+async def send_all(r: AutoSendRequest = None):
+    import time
+    if r is None: r = AutoSendRequest()
+    all_e = db.get_all_entities()
+    with_email = [e for e in all_e if e.get("email")]
+    to_send = [e for e in with_email if not e.get("email_sent")] if r.skip_already_sent else with_email
+    if r.limit: to_send = to_send[:r.limit]
+    if not to_send: return {"sent": 0, "message": "No pending"}
+    res = {"sent": 0, "failed": 0, "details": []}
+    for i, l in enumerate(to_send):
+        if i > 0: time.sleep(r.delay_seconds)
+        try:
+            x = email_service.send_email(to_email=l["email"], recipient_name=l.get("name"), include_attachments=r.include_attachments)
+            if x.get("success"):
+                res["sent"] += 1
+                db.mark_email_sent(l["id"])
+                res["details"].append({"id": l["id"], "email": l["email"], "ok": True})
+            else:
+                res["failed"] += 1
+                res["details"].append({"id": l["id"], "email": l["email"], "ok": False, "err": x.get("error")})
+        except Exception as ex:
+            res["failed"] += 1
+            res["details"].append({"id": l["id"], "email": l["email"], "ok": False, "err": str(ex)})
+    return res
+
+@app.get("/email/pending")
+async def pending():
+    a = db.get_all_entities()
+    w = [e for e in a if e.get("email")]
+    p = [e for e in w if not e.get("email_sent")]
+    return {"total": len(a), "with_email": len(w), "pending": len(p), "leads": [{"id": e["id"], "name": e.get("name"), "email": e.get("email")} for e in p]}
+
 def create_app():
     return app
 
