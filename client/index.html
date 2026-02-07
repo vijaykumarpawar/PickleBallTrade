@@ -12,7 +12,7 @@ body{font-family:system-ui;background:linear-gradient(135deg,#667eea,#764ba2);mi
 .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .form-group{margin-bottom:16px}
 .form-group label{display:block;font-weight:600;margin-bottom:8px}
-.form-group input,.form-group select{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px}
 .btn{padding:12px 24px;border:none;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.2s}
 .btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.2)}
 .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:white}
@@ -179,6 +179,7 @@ Checking email status...
 <div style="display:flex;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
 <h2>📋 Leads</h2>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
+<button class="btn btn-email btn-sm" onclick="sendAllEmails()">📧 Send All Emails</button>
 <button class="btn btn-primary btn-sm" onclick="refresh()">🔄 Refresh</button>
 <button class="btn btn-cyan btn-sm" onclick="enrichAll()">🔗 Enrich Missing</button>
 <button class="btn btn-primary btn-sm" onclick="exportCSV()">📥 Export CSV</button>
@@ -253,8 +254,12 @@ Checking email status...
 <div id="modalAttachments" class="attachment-list" style="margin-bottom:16px"></div>
 
 <div class="form-group">
-<label>Message Preview</label>
-<div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap;max-height:150px;overflow-y:auto;font-size:12px"></div>
+<label>Email Body (editable)</label>
+<textarea id="emailBody" rows="14" style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;resize:vertical;font-family:system-ui;font-size:13px;line-height:1.5"></textarea>
+</div>
+<div class="form-group">
+<label>WhatsApp Message Preview</label>
+<div id="msgText" style="background:#f8f9fa;padding:16px;border-radius:8px;white-space:pre-wrap;max-height:100px;overflow-y:auto;font-size:12px"></div>
 </div>
 <div id="sendStatus" class="send-status"></div>
 <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
@@ -262,6 +267,24 @@ Checking email status...
 <button class="btn btn-success" id="sendWABtn" onclick="sendWA()">💬 WhatsApp + Image</button>
 <button class="btn btn-cyan" onclick="enrichCurrent()">🔗 Enrich</button>
 <button class="btn" onclick="closeModal()">Close</button>
+</div>
+</div>
+</div>
+
+<!-- SEND ALL EMAILS MODAL -->
+<div class="modal" id="sendAllModal">
+<div class="modal-content">
+<h2>📧 Send All Pending Emails</h2>
+<p style="color:#666;margin:12px 0">This will send the proposal email to all leads that have an email address but haven't been emailed yet.</p>
+<div id="sendAllStatus" class="send-status" style="margin:16px 0;font-size:14px"></div>
+<div id="sendAllProgress" style="display:none;margin:16px 0">
+<div style="background:#e0e0e0;border-radius:8px;height:8px;overflow:hidden">
+<div id="sendAllBar" style="background:linear-gradient(135deg,#28a745,#20c997);height:100%;width:0%;transition:width 0.3s"></div>
+</div>
+</div>
+<div style="display:flex;gap:8px;margin-top:16px">
+<button class="btn btn-email" id="confirmSendAllBtn" onclick="confirmSendAll()">📧 Confirm & Send All</button>
+<button class="btn" onclick="closeSendAllModal()">Cancel</button>
 </div>
 </div>
 </div>
@@ -277,30 +300,55 @@ let pendingWAEntity = null;
 
 const PROPOSAL_TEMPLATE = `Dear Sir / Madam,
 
-Greetings from Manh Thang Pickleball Factory! 🏓
+Greetings.
 
-We are a leading manufacturer of tournament-grade pickleball equipment from Vietnam, looking for distribution partners in India.
+We are pleased to introduce Manh Thang Industrial Service Development Company Limited (Vietnam), a specialized manufacturer and OEM producer of tournament-grade pickleball balls, and propose a potential collaboration for bulk supply and distribution in the Indian market.
 
-✅ Our Products:
-• USAPA-certified pickleball balls
-• Premium paddles & nets
-• OEM/private label available
+Manh Thang Pickleball Factory operates with advanced rotational hot molding technology, strict quality management systems, and international compliance standards. The factory currently supplies to domestic and export markets including the USA and Europe.
 
-🏭 Factory Capacity: 25,000-30,000 balls/day
+View Our Product Catalog & Factory Details: https://drive.google.com/file/d/1h8w2aM2SvxvX7R40M51rAZznkljrmwHl/view?usp=sharing
 
-🤝 Partnership Benefits:
-• Factory-direct competitive pricing
-• Bulk order discounts
-• Reliable delivery schedules
+Product Highlight - E-WIN (ONE WIN) Pickleball Balls
+- Certified compliant with USA Pickleball Association (USAPA) standards
+- Designed for international competition and tournaments
+- Indoor ball weight: ~26 g
+- Outdoor ball weight: ~26.5 g
+- Diameter: 74 mm
+- 40 precision-drilled holes
+- High-quality PE virgin plastic
+- High-visibility green and yellow colors
 
-📞 Contact:
-Vijay Pawar (India)
-WhatsApp: +91-7975397211
+Manufacturing Strength
+- Current capacity: 25,000-30,000 balls per day
+- Factory area: over 7,000 m2
+- 65 skilled staff members
+
+Product Portfolio
+- S2 Tournament Pickleball
+- E-WIN (ONE WIN) Tournament Series
+- Vincent Series
+- Multi-color Pickleballs
+- 100% Biodegradable Pickleballs
+
+Why Partner With Manh Thang
+- Consistent tournament-grade quality
+- Competitive factory-direct pricing
+- OEM / Private label manufacturing available
+- Reliable production capacity & delivery schedules
+
+Factory Contact (Vietnam)
+Phone: +84 91 253 16 66
+Email: manhthang2666@gmail.com
+Website: www.manhthangpickleballfactory.com
+
+India Contact:
+Vijay Pawar
+Mobile / WhatsApp: +91-7975397211
 Email: vijaykp.kp@gmail.com
 
-Looking forward to your response!
+Looking forward to your positive response.
 
-Best regards,
+Warm regards,
 Vijay Pawar`;
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -500,59 +548,60 @@ async function enrichCurrent() {
     }
 }
 
-// ============ DISCOVER ============
+// ============ DISCOVERY ============
 
 async function discover() {
     const city = document.getElementById("city").value;
+    if (!city) { toast("Select a city", "error"); return; }
+    
     const limit = document.getElementById("limit").value;
     const strategy = document.getElementById("strategy").value;
     const deepSearch = document.getElementById("deepSearch").checked;
-    
-    if (!city) { toast("Select a city", "error"); return; }
-    
     const statusEl = document.getElementById("discoverStatus");
-    statusEl.innerHTML = '<span class="loading"></span> Discovering leads using ' + (deepSearch ? 'deep search (all strategies)' : strategy || 'auto strategy') + '...';
+    
+    statusEl.innerHTML = '<span class="loading"></span> Discovering leads...';
     
     try {
-        const r = await fetch(API + "/discover", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ city, limit: parseInt(limit), strategy: strategy || null, deep_search: deepSearch })
-        });
+        let url = API + `/discover?city=${encodeURIComponent(city)}&limit=${limit}`;
+        if (strategy) url += `&strategy=${strategy}`;
+        if (deepSearch) url += '&deep_search=true';
+        
+        const r = await fetch(url, { method: "POST" });
         const d = await r.json();
-        statusEl.innerHTML = `✅ Found ${d.discovered} leads from: ${d.sources?.join(', ') || 'web_search'}`;
+        
+        statusEl.innerHTML = `✅ Found ${d.discovered} new leads in ${city}`;
         toast(`Found ${d.discovered} leads!`, "success");
         refresh();
     } catch (e) {
         statusEl.innerHTML = '❌ Error discovering leads';
-        toast("Error discovering leads", "error");
+        toast("Discovery error", "error");
     }
 }
 
 async function discoverAll() {
-    if (!confirm("This will search ALL cities. It may take a while. Continue?")) return;
-    
     const statusEl = document.getElementById("discoverStatus");
-    const cities = [...document.getElementById("city").options].slice(1).map(o => o.value);
+    statusEl.innerHTML = '<span class="loading"></span> Discovering across all cities...';
     
-    statusEl.innerHTML = `<span class="loading"></span> Searching ${cities.length} cities...`;
-    
-    let total = 0;
-    for (const city of cities) {
-        try {
-            const r = await fetch(API + "/discover", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ city, limit: 5 })
-            });
-            const d = await r.json();
-            total += d.discovered;
-            statusEl.innerHTML = `<span class="loading"></span> ${city}: Found ${d.discovered} | Total: ${total}`;
-        } catch (e) {}
+    try {
+        const r = await fetch(API + "/cities");
+        const cities = (await r.json()).cities;
+        let total = 0;
+        
+        for (const city of cities) {
+            statusEl.innerHTML = `<span class="loading"></span> Searching ${city.name}...`;
+            try {
+                const r = await fetch(API + `/discover?city=${encodeURIComponent(city.name)}&limit=10`, { method: "POST" });
+                const d = await r.json();
+                total += d.discovered;
+                statusEl.innerHTML = `<span class="loading"></span> ${city.name}: Found ${d.discovered} | Total: ${total}`;
+            } catch (e) {}
+        }
+        
+        statusEl.innerHTML = `✅ Complete! Found ${total} leads across ${cities.length} cities`;
+        refresh();
+    } catch (e) {
+        statusEl.innerHTML = '❌ Error in multi-city discovery';
     }
-    
-    statusEl.innerHTML = `✅ Complete! Found ${total} leads across ${cities.length} cities`;
-    refresh();
 }
 
 // ============ REFRESH & RENDER ============
@@ -586,7 +635,7 @@ function render() {
         const waSent = e.whatsapp_sent === 1;
         
         let statusHtml = emailSent || waSent ? 
-            `<div style="display:flex;gap:4px">${emailSent ? '<span class="sent-badge">📧✓</span>' : ''}${waSent ? '<span class="sent-badge">💬✓</span>' : ''}</div>` : 
+            `<div style="display:flex;gap:4px">${emailSent ? '<span class="sent-badge">📧✓</span>' : ''}${waSent ? '<span class="sent-badge">💬✓</span>' : ''}</div>` :
             '<span style="color:#999">—</span>';
         
         const contact = e.email ? e.email : (e.phone ? e.phone : '<span style="color:#999">No contact</span>');
@@ -600,11 +649,11 @@ function render() {
             <td>${source}</td>
             <td>${statusHtml}</td>
             <td class="action-buttons">
-                <button class="${emailSent ? 'btn btn-sent' : 'btn btn-email'}" style="padding:6px 10px;font-size:12px" 
+                <button class="${emailSent ? 'btn btn-sent' : 'btn btn-email'}" style="padding:6px 10px;font-size:12px"
                     onclick="openModal(${e.id})" ${!e.email ? 'disabled' : ''}>
                     ${emailSent ? '✓' : '📧'}
                 </button>
-                <button class="${waSent ? 'btn btn-sent' : 'btn btn-success'}" style="padding:6px 10px;font-size:12px" 
+                <button class="${waSent ? 'btn btn-sent' : 'btn btn-success'}" style="padding:6px 10px;font-size:12px"
                     onclick="quickWA(${e.id})" ${!e.phone ? 'disabled' : ''}>
                     ${waSent ? '✓' : '💬'}
                 </button>
@@ -623,8 +672,17 @@ function openModal(id) {
     document.getElementById("recipientType").value = current.type || "Unknown";
     document.getElementById("recipientEmail").value = current.email || "No email";
     document.getElementById("recipientPhone").value = current.phone || current.whatsapp || "No phone";
-    document.getElementById("msgText").textContent = PROPOSAL_TEMPLATE;
     document.getElementById("sendStatus").textContent = "";
+    
+    // Populate editable email body with personalized template
+    var emailBodyText = PROPOSAL_TEMPLATE;
+    if (current.name && current.name !== "Unknown") {
+        emailBodyText = emailBodyText.replace("Dear Sir / Madam", "Dear " + current.name);
+    }
+    document.getElementById("emailBody").value = emailBodyText;
+    
+    // WhatsApp preview
+    document.getElementById("msgText").textContent = "Partnership Opportunity - Manh Thang Pickleball Factory. Catalog: https://drive.google.com/file/d/1h8w2aM2SvxvX7R40M51rAZznkljrmwHl/view?usp=sharing";
     
     const warningEl = document.getElementById("alreadySentWarning");
     warningEl.style.display = (current.email_sent === 1 || current.whatsapp_sent === 1) ? "block" : "none";
@@ -634,11 +692,13 @@ function openModal(id) {
     const sendBtn = document.getElementById("sendEmailBtn");
     const sendWABtn = document.getElementById("sendWABtn");
     
+    sendBtn.disabled = false;
     sendBtn.className = !emailConfigured || !current.email ? "btn btn-disabled" : current.email_sent === 1 ? "btn btn-sent" : "btn btn-email";
-    sendBtn.innerHTML = current.email_sent === 1 ? "✓ Resend" : "📧 Email";
+    sendBtn.innerHTML = current.email_sent === 1 ? "📧 Resend Email" : "📧 Send Email";
     
+    sendWABtn.disabled = false;
     sendWABtn.className = !current.phone && !current.whatsapp ? "btn btn-disabled" : current.whatsapp_sent === 1 ? "btn btn-sent" : "btn btn-success";
-    sendWABtn.innerHTML = current.whatsapp_sent === 1 ? "✓ Resend" : "💬 WhatsApp + 🖼️";
+    sendWABtn.innerHTML = current.whatsapp_sent === 1 ? "💬 Resend WA" : "💬 WhatsApp + 🖼️";
     
     document.getElementById("modal").classList.add("active");
 }
@@ -729,16 +789,19 @@ async function sendWA() {
         if (d.success) {
             statusEl.innerHTML = '✅ WhatsApp sent' + (d.image ? ' with image!' : '!');
             sendBtn.className = "btn btn-sent";
-            sendBtn.innerHTML = "✓ Sent";
+            sendBtn.innerHTML = "✓ Sent!";
             current.whatsapp_sent = 1;
             refresh();
+            setTimeout(() => { sendBtn.disabled = false; sendBtn.innerHTML = "💬 Resend WA"; }, 2000);
         } else {
             statusEl.innerHTML = '❌ ' + (d.error || "Error");
             sendBtn.disabled = false;
+            sendBtn.innerHTML = "💬 WhatsApp + 🖼️";
         }
     } catch (e) {
         statusEl.innerHTML = '❌ ' + e.message;
         sendBtn.disabled = false;
+        sendBtn.innerHTML = "💬 WhatsApp + 🖼️";
     }
 }
 
@@ -750,37 +813,94 @@ async function sendEmail() {
     const sendBtn = document.getElementById("sendEmailBtn");
     const subject = document.getElementById("emailSubject").value;
     const includeAttachments = document.getElementById("includeAttachments").checked;
+    const customBody = document.getElementById("emailBody").value.trim();
     
     statusEl.innerHTML = '<span class="loading"></span> Sending email...';
     sendBtn.disabled = true;
     
     try {
+        const payload = {
+            to_email: current.email,
+            subject,
+            recipient_name: current.name,
+            include_attachments: includeAttachments,
+            entity_id: current.id
+        };
+        if (customBody) {
+            payload.custom_body = customBody;
+        }
+        
         const r = await fetch(API + "/email/send", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                to_email: current.email,
-                subject,
-                recipient_name: current.name,
-                include_attachments: includeAttachments,
-                entity_id: current.id
-            })
+            body: JSON.stringify(payload)
         });
         const d = await r.json();
         
         if (r.ok && d.success) {
             statusEl.innerHTML = '✅ Email sent to ' + current.email;
             sendBtn.className = "btn btn-sent";
-            sendBtn.innerHTML = "✓ Sent";
+            sendBtn.innerHTML = "✓ Sent!";
             current.email_sent = 1;
             refresh();
+            setTimeout(() => { sendBtn.disabled = false; sendBtn.innerHTML = "📧 Resend Email"; }, 2000);
         } else {
             statusEl.innerHTML = '❌ ' + (d.detail || d.error || "Error");
             sendBtn.disabled = false;
+            sendBtn.innerHTML = "📧 Send Email";
         }
     } catch (e) {
         statusEl.innerHTML = '❌ ' + e.message;
         sendBtn.disabled = false;
+        sendBtn.innerHTML = "📧 Send Email";
+    }
+}
+
+// ============ SEND ALL EMAILS ============
+
+async function sendAllEmails() {
+    document.getElementById("sendAllModal").classList.add("active");
+    const statusEl = document.getElementById("sendAllStatus");
+    statusEl.innerHTML = '<span class="loading"></span> Checking pending emails...';
+    
+    try {
+        const r = await fetch(API + "/email/pending");
+        const d = await r.json();
+        statusEl.innerHTML = `Found <b>${d.pending_count}</b> leads with email that haven't been emailed yet.`;
+    } catch (e) {
+        statusEl.innerHTML = '❌ Error checking pending: ' + e.message;
+    }
+}
+
+function closeSendAllModal() { 
+    document.getElementById("sendAllModal").classList.remove("active"); 
+}
+
+async function confirmSendAll() {
+    const statusEl = document.getElementById("sendAllStatus");
+    const btn = document.getElementById("confirmSendAllBtn");
+    const progressDiv = document.getElementById("sendAllProgress");
+    const bar = document.getElementById("sendAllBar");
+    
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading"></span> Sending...';
+    progressDiv.style.display = "block";
+    
+    try {
+        const r = await fetch(API + "/email/send-all", { method: "POST" });
+        const d = await r.json();
+        
+        bar.style.width = "100%";
+        statusEl.innerHTML = `✅ Done! Sent: ${d.sent}, Failed: ${d.failed}, Skipped: ${d.skipped}`;
+        btn.innerHTML = "✅ Complete";
+        toast(`Sent ${d.sent} emails!`, "success");
+        refresh();
+        
+        setTimeout(() => { btn.disabled = false; btn.innerHTML = "📧 Confirm & Send All"; }, 3000);
+    } catch (e) {
+        statusEl.innerHTML = '❌ Error: ' + e.message;
+        btn.disabled = false;
+        btn.innerHTML = "📧 Confirm & Send All";
     }
 }
 
